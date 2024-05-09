@@ -1,6 +1,7 @@
 import whisper
 import time
 from os import path
+import argparse
 from datetime import timedelta
 
 from webvtt import WebVTT, Caption
@@ -47,5 +48,9 @@ class LectureVideoProcessor:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--file")
+    args = parser.parse_args()
     processor = LectureVideoProcessor()
-    processor.process("E:\Programmiertes\FoPro\Test.wav")
+    processor.process(args.file)
