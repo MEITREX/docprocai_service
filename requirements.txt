@@ -1,0 +1,3 @@
+whisper-cpp-python
+webvtt-py
+ffmpeg-python

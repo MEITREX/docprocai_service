@@ -1,23 +1,50 @@
-import whisper
 import time
+from whispercpp import Whisper
 from os import path
 import argparse
 from datetime import timedelta
+import ffmpeg
+import numpy as np
+import typing
 
 from webvtt import WebVTT, Caption
 
+class LectureAudioProcessor:
+    """
+    Extracts transcripts from a lecture video or audio file.
+    """
 
-class LectureVideoProcessor:
     def __init__(self):
-        self.model: whisper.Whisper = whisper.load_model(name="base")
+        self.whisper = Whisper.from_pretrained("base")
+        self.whisper.params.with_print_timestamps(True).build()
 
-    def process(self, audio_file: str) -> str:
+    def process(self, file_name: str) -> str:
         start_time: float = time.time()
-        result = self.model.transcribe(audio=audio_file, word_timestamps=True)
+
+        # load audio data from file
+        try:
+            sample_rate = 16000
+            y, _ = (
+                ffmpeg.input(file_name, threads=0)
+                .output("-", format="s16le", acodec="pcm_s16le", ac=1, ar=sample_rate)
+                .run(
+                    cmd=["ffmpeg", "-nostdin"], capture_stdout=True, capture_stderr=True
+                )
+            )
+        except ffmpeg.Error as e:
+            raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}") from e
+
+        # audio data load into numpy array
+        arr = np.frombuffer(y, np.int16).flatten().astype(np.float32) / 32768.0
+
+        # transcribe audio
+        result = self.whisper.transcribe(arr)
         end_time: float = time.time()
 
         result_text: str = ""
 
+        print(result)
+        return
         vtt = WebVTT()
 
         for segment in result["segments"]:
@@ -52,5 +79,5 @@ if __name__ == "__main__":
 
     parser.add_argument("--file")
     args = parser.parse_args()
-    processor = LectureVideoProcessor()
+    processor = LectureAudioProcessor()
     processor.process(args.file)
