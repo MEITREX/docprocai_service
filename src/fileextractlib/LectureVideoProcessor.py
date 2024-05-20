@@ -5,15 +5,34 @@ import argparse
 from datetime import timedelta
 import numpy as np
 import ffmpeg
+import io
 
 from webvtt import WebVTT, Caption
 
 
 class LectureVideoProcessor:
-    def __init__(self):
-        self.model: whisper.Whisper = whisper.load_model(name="base")
+    """
+     Can be used to convert lecture video/audio to text transcripts in WebVTT format.
+    """
+
+    def __init__(self, whisper_model: str = "base"):
+        """
+        Create a new instance of the class, which can be used to process lecture video/audio recordings into text transcripts.
+
+        :param whisper_model: OpenAI whisper model name, defaults to "base"
+        """
+        self.model: whisper.Whisper = whisper.load_model(name=whisper_model)
 
     def process(self, file_name: str) -> str:
+        """
+        Processes the file with the specified name to a transcript. Uses ffmpeg internally to extract the audio, so any video/audio format readable by 
+        ffmpeg works by default. Additionally, networked resources supported by ffmpeg also work (e.g. specifying an HTTP URL to a video file as file_name)
+
+        :param file_name: Name/path of the input video/audio file.
+        :raises RuntimeError: Raised when the ffmpeg process encounters an error during audio extraction.
+        :return: Returnsa transcript as a string, in WebVTT caption format.
+        """
+
         # load audio data from file
         try:
             sample_rate = 16000
@@ -34,14 +53,12 @@ class LectureVideoProcessor:
         result = self.model.transcribe(audio=audio_data, word_timestamps=True)
         end_time: float = time.time()
 
-        result_text: str = ""
-
         vtt = WebVTT()
 
         for segment in result["segments"]:
             segment_text: str = ""
             for word in segment["words"]:
-                segment_text += word["word"] + " "
+                segment_text += word["word"]
 
             segment_start = timedelta(seconds=segment["words"][0]["start"])
             segment_end = timedelta(seconds=segment["words"][-1]["end"])
@@ -58,11 +75,13 @@ class LectureVideoProcessor:
                 "-" + segment_text
             )
             vtt.captions.append(caption)
-            vtt.save("test.vtt")
-            result_text += str(timedelta(seconds=segment["words"][0]["start"])) + " -- " + segment_text + "\n"
 
         print("Processed text in " + str(end_time - start_time) + " seconds.")
-        return result_text
+        
+        with io.StringIO() as f:
+            vtt.write(f)
+            f.seek(0)
+            return f.read() 
 
 
 if __name__ == "__main__":
@@ -71,4 +90,5 @@ if __name__ == "__main__":
     parser.add_argument("--file")
     args = parser.parse_args()
     processor = LectureVideoProcessor()
-    processor.process(args.file)
+    result = processor.process(args.file)
+    print(result)
