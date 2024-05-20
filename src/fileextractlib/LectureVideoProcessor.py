@@ -3,6 +3,8 @@ import time
 from os import path
 import argparse
 from datetime import timedelta
+import numpy as np
+import ffmpeg
 
 from webvtt import WebVTT, Caption
 
@@ -11,9 +13,25 @@ class LectureVideoProcessor:
     def __init__(self):
         self.model: whisper.Whisper = whisper.load_model(name="base")
 
-    def process(self, audio_file: str) -> str:
+    def process(self, file_name: str) -> str:
+        # load audio data from file
+        try:
+            sample_rate = 16000
+            y, _ = (
+                ffmpeg.input(file_name, threads=0)
+                .output("-", format="s16le", acodec="pcm_s16le", ac=1, ar=sample_rate)
+                .run(
+                    cmd=["ffmpeg", "-nostdin"], capture_stdout=True, capture_stderr=True
+                )
+            )
+        except ffmpeg.Error as e:
+            raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}") from e
+
+        # audio data load into numpy array
+        audio_data = np.frombuffer(y, np.int16).flatten().astype(np.float32) / 32768.0
+
         start_time: float = time.time()
-        result = self.model.transcribe(audio=audio_file, word_timestamps=True)
+        result = self.model.transcribe(audio=audio_data, word_timestamps=True)
         end_time: float = time.time()
 
         result_text: str = ""
