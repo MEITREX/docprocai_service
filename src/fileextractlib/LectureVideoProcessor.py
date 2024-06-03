@@ -87,8 +87,10 @@ class LectureVideoProcessor:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--file")
+    parser.add_argument("--infile")
+    parser.add_argument("--outfile")
     args = parser.parse_args()
     processor = LectureVideoProcessor()
     result = processor.process(args.file)
-    print(result)
+    with open(args.outfile, "w") as f:
+        f.write(result)
