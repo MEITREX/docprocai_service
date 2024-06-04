@@ -1,5 +1,6 @@
 import whisper
 import time
+import os
 from os import path
 import argparse
 from datetime import timedelta
@@ -60,8 +61,8 @@ class LectureVideoProcessor:
             for word in segment["words"]:
                 segment_text += word["word"]
 
-            segment_start = timedelta(seconds=segment["words"][0]["start"])
-            segment_end = timedelta(seconds=segment["words"][-1]["end"])
+            segment_start = timedelta(seconds=segment["start"])
+            segment_end = timedelta(seconds=segment["end"])
 
             if segment_start.microseconds == 0:
                 segment_start = segment_start + timedelta(microseconds=1)
@@ -83,14 +84,39 @@ class LectureVideoProcessor:
             f.seek(0)
             return f.read() 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--infile")
     parser.add_argument("--outfile")
+    parser.add_argument("--indir")
+    parser.add_argument("--outdir")
     args = parser.parse_args()
     processor = LectureVideoProcessor()
-    result = processor.process(args.file)
-    with open(args.outfile, "w") as f:
-        f.write(result)
+
+    if args.infile is not None and args.indir is not None:
+        raise ValueError("Cannot specify both infile and indir. Either process a single file or batch process a folder")
+    
+    if args.infile is not None:
+        if args.outfile is None:
+            raise ValueError("Must specify outfile when specifying infile")
+        
+        result = processor.process(args.infile)
+        with open(args.outfile, "w") as f:
+            f.write(result)
+    elif args.indir is not None:
+        if args.outdir is None:
+            raise ValueError("Must specify outdir when specifying indir")
+        
+        # process all files in the directory and its subdirectories
+        for root, dirs, files in os.walk(args.indir):
+            relpath: str = path.relpath(root, args.indir)
+            for file in files:
+                file_path: str = path.join(root, file)
+                out_dir: str = path.join(args.outdir, relpath)
+                if not os.path.exists(out_dir):
+                    os.makedirs(out_dir)
+                out_path: str = path.join(out_dir, file + ".vtt")
+                result = processor.process(file_path)
+                with open(out_path, "w") as f:
+                    f.write(result)
