@@ -1,12 +1,15 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, BitsAndBytesConfig
 import torch
+from lmformatenforcer import JsonSchemaParser
+from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
+import pydantic
 
 model_id = "meta-llama/Meta-Llama-3-8B"
 
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
-tokenizer = AutoTokenizer.from_pretrained(model_id, token="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", quantization_config=quantization_config)
-model = AutoModelForCausalLM.from_pretrained(model_id, token="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", quantization_config=quantization_config)
+tokenizer = AutoTokenizer.from_pretrained(model_id, quantization_config=quantization_config)
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
 
 pipeline = pipeline(
     "text-generation",
@@ -15,12 +18,19 @@ pipeline = pipeline(
     model_kwargs={"torch_dtype": torch.bfloat16},
 )
 
+class Chapter(pydantic.BaseModel):
+    starttime: str
+    title: str
 
-#prompt = pipeline.tokenizer.apply_chat_template(
-#        messages, 
-#        tokenize=False, 
-#        add_generation_prompt=True
-#)
+class AnswerSchema(pydantic.BaseModel):
+    chapter1: Chapter
+    chapter2: Chapter
+    chapter3: Chapter
+    chapter4: Chapter
+    chapter5: Chapter
+
+parser = JsonSchemaParser(AnswerSchema.model_json_schema())
+prefix_function = build_transformers_prefix_allowed_tokens_fn(tokenizer, parser)
 
 input = """
 # Captions with timestamps:
@@ -234,18 +244,23 @@ input = """
 00:10:52.780 --> 00:10:57.040
 - It is even ambiguously used within the field of information visualization.
 
-# Summary: 
+# Json Schema:
+""" + AnswerSchema.schema_json() + """
+
+# Tags describing the lecture:
 """
 
-input_ids = tokenizer(input, return_tensors="pt").input_ids.to("cuda")
+#input_ids = tokenizer(input, return_tensors="pt").input_ids.to("cuda")
 
 terminators = [
     pipeline.tokenizer.eos_token_id,
     pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
 ]
 
-outputs = model.generate(input_ids, do_sample=True)
+#outputs = model.generate(input_ids, do_sample=True)
 
-result = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+result = pipeline(input, prefix_allowed_tokens_fn=prefix_function)
 
-print(result[0])
+#result = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+print(result)
