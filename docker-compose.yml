@@ -1,0 +1,15 @@
+version: "3"
+services:
+  database-search:
+    image: pgvector/pgvector:pg16
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - searchdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=root
+      - POSTGRES_DB=search-service
+volumes:
+  searchdata:
