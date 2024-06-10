@@ -4,3 +4,4 @@ venv
 *.mp4
 *.wav
 *.vtt
+__pycache__
