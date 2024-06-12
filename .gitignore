@@ -5,4 +5,7 @@ venv
 *.mp4
 *.wav
 *.vtt
+*.pdf
+*.ppt
+*.pptx
 __pycache__
