@@ -1,0 +1,7 @@
+venv
+.vscode
+*.mp3
+*.mp4
+*.wav
+*.vtt
+__pycache__
