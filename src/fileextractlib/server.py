@@ -1,6 +1,8 @@
 import fastapi
 import SentenceEmbeddingRunner
 from pydantic import BaseModel
+import LlamaRunner
+import LectureVideoProcessor
 
 app = fastapi.FastAPI()
 
@@ -20,3 +22,22 @@ def generate_embeddings(request: GenerateEmbeddingsRequest):
     return {
         "embeddings": [embedding.tolist() for embedding in embeddings]
     }
+
+class GenerateTagsFromVideoRequest(BaseModel):
+    video_url: str
+
+@app.post(path="/generate-tags-from-video/")
+def generate_tags_from_video(request: GenerateTagsFromVideoRequest):
+    class TranscriptAnswerSchema(BaseModel):
+        tag1: str
+        tag2: str
+        tag3: str
+        tag4: str
+        tag5: str
+
+    lecture_video_processor = LectureVideoProcessor.LectureVideoProcessor()
+    transcript_text = lecture_video_processor.process(request.video_url)
+
+    input_text = "# Video Transcript:\n" + transcript_text + "\n\n# Json Schema:\n" + TranscriptAnswerSchema.schema_json() + "\n\n# Json Result:\n"
+
+    LlamaRunner.generate_text(input_text, TranscriptAnswerSchema)
