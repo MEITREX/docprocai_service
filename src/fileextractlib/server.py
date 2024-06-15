@@ -18,6 +18,8 @@ register_vector(db_conn)
 db_conn.execute("DROP TABLE IF EXISTS documents")
 db_conn.execute("CREATE TABLE IF NOT EXISTS documents (id SERIAL PRIMARY KEY, text text, embedding vector(1024))")
 
+llamaRunner: LlamaRunner.LlamaRunner | None = None
+
 @app.get("/generate-embedding/")
 def generate_embedding(input_text: str):
     embeddings = SentenceEmbeddingRunner.generate_embeddings([input_text])
@@ -51,8 +53,10 @@ def generate_tags_from_video(request: GenerateTagsFromVideoRequest):
     transcript_text = lecture_video_processor.process(request.video_url)
 
     input_text = "# Video Transcript:\n" + transcript_text + "\n\n# Json Schema:\n" + TranscriptAnswerSchema.schema_json() + "\n\n# Json Result:\n"
-
-    LlamaRunner.generate_text(input_text, TranscriptAnswerSchema)
+    
+    if llamaRunner == None:
+        llamaRunner = LlamaRunner.LlamaRunner()
+    llamaRunner.generate_text(input_text, TranscriptAnswerSchema)
 
 class IngestFileIntoDbRequest(BaseModel):
     file_url: str
