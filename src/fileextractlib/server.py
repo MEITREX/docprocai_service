@@ -22,7 +22,7 @@ llamaRunner: LlamaRunner.LlamaRunner | None = None
 
 def ingest_document_task(file_url: str):
     pdf_processsor = PdfProcessor.PdfProcessor()
-    pages: list[str] = pdf_processsor.process(file_url)
+    pages: list[str] = pdf_processsor.process_from_url(file_url)
 
     # remove null and empty strings
     filtered_pages_text = [x["text"] for x in pages if x["text"] is not None and x["text"].strip()]
