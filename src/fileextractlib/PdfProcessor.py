@@ -18,7 +18,7 @@ class PdfProcessor:
         pages = []
 
         for page_number, page_data in enumerate(doc):
-            text = pytesseract.image_to_string(page_data).encode("utf-8")
+            text = pytesseract.image_to_string(page_data)
             pages.append({
                 "page_number": page_number,
                 "text": text}
