@@ -8,15 +8,15 @@ model_id = "meta-llama/Meta-Llama-3-8B"
 
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
-tokenizer = AutoTokenizer.from_pretrained(model_id, quantization_config=quantization_config)
-model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+#tokenizer = AutoTokenizer.from_pretrained(model_id, quantization_config=quantization_config)
+#model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
 
-pipeline = pipeline(
-    "text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    model_kwargs={"torch_dtype": torch.bfloat16},
-)
+#pipeline = pipeline(
+#    "text-generation",
+#    model=model,
+#    tokenizer=tokenizer,
+#    model_kwargs={"torch_dtype": torch.bfloat16},
+#)
 
 def generate_text(prompt: str, answer_schema=None):
     if answer_schema != None:

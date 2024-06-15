@@ -4,7 +4,7 @@ services:
     image: pgvector/pgvector:pg16
     restart: always
     ports:
-      - "5432:5432"
+      - "5431:5432"
     volumes:
       - searchdata:/var/lib/postgresql/data
     environment:

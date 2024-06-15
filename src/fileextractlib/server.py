@@ -3,8 +3,20 @@ import SentenceEmbeddingRunner
 from pydantic import BaseModel
 import LlamaRunner
 import LectureVideoProcessor
+import PdfProcessor as PdfProcessor
+import uvicorn
+from pgvector.psycopg import register_vector
+import psycopg
 
 app = fastapi.FastAPI()
+
+db_conn = psycopg.connect("user=root password=root host=localhost port=5431 dbname=search-service")
+
+db_conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+register_vector(db_conn)
+
+db_conn.execute("DROP TABLE IF EXISTS documents")
+db_conn.execute("CREATE TABLE IF NOT EXISTS documents (id SERIAL PRIMARY KEY, text text, embedding vector(1024))")
 
 @app.get("/generate-embedding/")
 def generate_embedding(input_text: str):
@@ -41,3 +53,28 @@ def generate_tags_from_video(request: GenerateTagsFromVideoRequest):
     input_text = "# Video Transcript:\n" + transcript_text + "\n\n# Json Schema:\n" + TranscriptAnswerSchema.schema_json() + "\n\n# Json Result:\n"
 
     LlamaRunner.generate_text(input_text, TranscriptAnswerSchema)
+
+class IngestFileIntoDbRequest(BaseModel):
+    file_url: str
+
+@app.post("/db-ingest-pages/", status_code=202)
+def ingest_file_into_db(request: IngestFileIntoDbRequest, background_tasks: fastapi.BackgroundTasks):
+    def ingest_file_task(file_url: str):
+        pdf_processsor = PdfProcessor.PdfProcessor()
+        pages: list[str] = pdf_processsor.process(file_url)
+
+        # remove null and empty strings
+        filtered_pages_text = [x["text"] for x in pages if x["text"] is not None and x["text"].strip()]
+
+        embeddings = SentenceEmbeddingRunner.generate_embeddings(filtered_pages_text)
+
+        for embedding in embeddings:
+            db_conn.execute("INSERT INTO documents (text, embedding) VALUES (%s, %s)", (filtered_pages_text.pop(0), embedding.tolist()))
+
+
+    background_tasks.add_task(ingest_file_task, request.file_url)
+
+    return {"message": "File has been added to ingest queue."}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

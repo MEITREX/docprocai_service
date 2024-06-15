@@ -9,7 +9,7 @@ class PdfProcessor:
      Can be used to convert documents in pdf format into raw text
     """
 
-    def process(self, file_name: str) -> str:
+    def process(self, file_name: str) -> list:
 
             
         doc = convert_from_path(file_name)
@@ -19,7 +19,10 @@ class PdfProcessor:
 
         for page_number, page_data in enumerate(doc):
             text = pytesseract.image_to_string(page_data).encode("utf-8")
-            pages.append({page_number, text})
+            pages.append({
+                "page_number": page_number,
+                "text": text}
+            )
         
         return pages
 
