@@ -11,7 +11,7 @@ import io
 from webvtt import WebVTT, Caption
 
 
-class LectureVideoProcessor:
+class TranscriptGenerator:
     """
      Can be used to convert lecture video/audio to text transcripts in WebVTT format.
     """
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument("--indir")
     parser.add_argument("--outdir")
     args = parser.parse_args()
-    processor = LectureVideoProcessor()
+    processor = TranscriptGenerator()
 
     if args.infile is not None and args.indir is not None:
         raise ValueError("Cannot specify both infile and indir. Either process a single file or batch process a folder")

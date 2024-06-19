@@ -2,7 +2,7 @@ import fastapi
 import SentenceEmbeddingRunner
 from pydantic import BaseModel
 import LlamaRunner
-import LectureVideoProcessor
+import fileextractlib.TranscriptGenerator as TranscriptGenerator
 import PdfProcessor as PdfProcessor
 import uvicorn
 from pgvector.psycopg import register_vector
@@ -63,7 +63,7 @@ def generate_tags_from_video(request: GenerateTagsFromVideoRequest):
         tag4: str
         tag5: str
 
-    lecture_video_processor = LectureVideoProcessor.LectureVideoProcessor()
+    lecture_video_processor = TranscriptGenerator.LectureVideoProcessor()
     transcript_text = lecture_video_processor.process(request.video_url)
 
     input_text = "# Video Transcript:\n" + transcript_text + "\n\n# Json Schema:\n" + TranscriptAnswerSchema.schema_json() + "\n\n# Json Result:\n"
