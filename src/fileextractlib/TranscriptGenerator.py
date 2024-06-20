@@ -24,7 +24,7 @@ class TranscriptGenerator:
         """
         self.model: whisper.Whisper = whisper.load_model(name=whisper_model)
 
-    def process_to_vtt(self, file_name: str) -> str:
+    def process_to_vtt(self, file_name: str) -> WebVTT:
         """
         Processes the file with the specified name to a transcript. Uses ffmpeg internally to extract the audio, so any video/audio format readable by 
         ffmpeg works by default. Additionally, networked resources supported by ffmpeg also work (e.g. specifying an HTTP URL to a video file as file_name)
