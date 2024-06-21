@@ -1,0 +1,17 @@
+ffmpeg-python
+pytesseract
+python-pptx
+transformers
+bitsandbytes
+pydantic
+lm-format-enforcer
+webvtt-py
+numpy
+openai-whisper
+Pillow
+levenshtein
+pdf2image
+sentence-transformers
+fastapi
+psycopg
+uvicorn
