@@ -11,7 +11,7 @@ import io
 from webvtt import WebVTT, Caption
 
 
-class LectureVideoProcessor:
+class TranscriptGenerator:
     """
      Can be used to convert lecture video/audio to text transcripts in WebVTT format.
     """
@@ -24,16 +24,15 @@ class LectureVideoProcessor:
         """
         self.model: whisper.Whisper = whisper.load_model(name=whisper_model)
 
-    def process(self, file_name: str) -> str:
+    def process_to_vtt(self, file_name: str) -> WebVTT:
         """
         Processes the file with the specified name to a transcript. Uses ffmpeg internally to extract the audio, so any video/audio format readable by 
         ffmpeg works by default. Additionally, networked resources supported by ffmpeg also work (e.g. specifying an HTTP URL to a video file as file_name)
 
         :param file_name: Name/path of the input video/audio file.
         :raises RuntimeError: Raised when the ffmpeg process encounters an error during audio extraction.
-        :return: Returnsa transcript as a string, in WebVTT caption format.
+        :return: Returns a WebVTT object containing the transcript.
         """
-
         # load audio data from file
         try:
             sample_rate = 16000
@@ -78,6 +77,19 @@ class LectureVideoProcessor:
             vtt.captions.append(caption)
 
         print("Processed text in " + str(end_time - start_time) + " seconds.")
+        return vtt
+        
+
+    def process_to_file(self, file_name: str) -> str:
+        """
+        Processes the file with the specified name to a transcript. Uses ffmpeg internally to extract the audio, so any video/audio format readable by 
+        ffmpeg works by default. Additionally, networked resources supported by ffmpeg also work (e.g. specifying an HTTP URL to a video file as file_name)
+
+        :param file_name: Name/path of the input video/audio file.
+        :raises RuntimeError: Raised when the ffmpeg process encounters an error during audio extraction.
+        :return: Returnsa transcript as a string, in WebVTT caption format.
+        """
+        vtt = self.process_to_vtt(file_name)
         
         with io.StringIO() as f:
             vtt.write(f)
@@ -92,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument("--indir")
     parser.add_argument("--outdir")
     args = parser.parse_args()
-    processor = LectureVideoProcessor()
+    processor = TranscriptGenerator()
 
     if args.infile is not None and args.indir is not None:
         raise ValueError("Cannot specify both infile and indir. Either process a single file or batch process a folder")
