@@ -1,15 +1,23 @@
 version: "3"
 services:
-  database-search:
+  database-docprocai:
     image: pgvector/pgvector:pg16
     restart: always
     ports:
-      - "5431:5432"
+      - "9932:5432"
     volumes:
       - searchdata:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=root
       - POSTGRES_DB=search-service
+  app-docprocai:
+    build:
+      context: ./../docprocai_service
+      dockerfile: Dockerfile
+    restart: always
+    container_name: docprocai_service
+    ports:
+      - "9900:8000"
 volumes:
   searchdata:

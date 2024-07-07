@@ -1,0 +1,12 @@
+# will be mapped to OffsetDateTime in Java
+scalar DateTime @specifiedBy(url: "https://scalars.graphql.org/andimarek/date-time.html")
+# will be mapped to LocalDate in Java
+scalar Date @specifiedBy(url:"https://tools.ietf.org/html/rfc3339")
+# will be mapped to OffsetTime in Java
+scalar Time @specifiedBy(url:"https://tools.ietf.org/html/rfc3339")
+# will be mapped to LocalTime in Java
+scalar LocalTime
+# will be mapped to UUID in Java
+scalar UUID @specifiedBy(url: "https://tools.ietf.org/html/rfc4122")
+# will be mapped to URL in Java
+scalar Url @specifiedBy(url:"https://www.w3.org/Addressing/URL/url-spec.txt")

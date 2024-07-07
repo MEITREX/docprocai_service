@@ -1,0 +1,18 @@
+type Mutation {
+    _internal_noauth_ingestDocument(input: IngestDocumentInput!): UUID
+    _internal_noauth_ingestVideo(input: IngestVideoInput!): UUID
+}
+
+input IngestDocumentInput {
+    """
+    UUID of the media record of this document.
+    """
+    id: UUID!
+}
+
+input IngestVideoInput {
+    """
+    UUID of the media record of this video.
+    """
+    id: UUID!
+}

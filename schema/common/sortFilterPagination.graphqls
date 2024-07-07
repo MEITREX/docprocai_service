@@ -1,0 +1,104 @@
+"""
+Specifies the sort direction, either ascending or descending.
+"""
+enum SortDirection {
+    ASC
+    DESC
+}
+
+"""
+Specifies the page size and page number for paginated results.
+"""
+input Pagination {
+    """
+    The page number, starting at 0.
+    If not specified, the default value is 0.
+    For values greater than 0, the page size must be specified.
+    If this value is larger than the number of pages, an empty page is returned.
+    """
+    page: Int! = 0 @PositiveOrZero
+    """
+    The number of elements per page.
+    """
+    size: Int! @Positive
+}
+
+"""
+Return type for information about paginated results.
+"""
+type PaginationInfo {
+    """
+    The current page number.
+    """
+    page: Int!
+    """
+    The number of elements per page.
+    """
+    size: Int!
+    """
+    The total number of elements across all pages.
+    """
+    totalElements: Int!
+    """
+    The total number of pages.
+    """
+    totalPages: Int!
+    """
+    Whether there is a next page.
+    """
+    hasNext: Boolean!
+}
+
+"""
+Filter for string values.
+If multiple filters are specified, they are combined with AND.
+"""
+input StringFilter {
+    """
+    A string value to match exactly.
+    """
+    equals: String
+    """
+    A string value that must be contained in the field that is being filtered.
+    """
+    contains: String
+    """
+    If true, the filter is case-insensitive.
+    """
+    ignoreCase: Boolean! = false
+}
+
+"""
+Filter for integer values.
+If multiple filters are specified, they are combined with AND.
+"""
+input IntFilter {
+    """
+    An integer value to match exactly.
+    """
+    equals: Int
+    """
+    If specified, filters for values greater than to the specified value.
+    """
+    greaterThan: Int
+    """
+    If specified, filters for values less than to the specified value.
+    """
+    lessThan: Int
+}
+
+"""
+Filter for date values.
+If multiple filters are specified, they are combined with AND.
+"""
+input DateTimeFilter {
+    """
+    If specified, filters for dates after the specified value.
+    """
+    after: DateTime
+    """
+    If specified, filters for dates before the specified value.
+    """
+    before: DateTime
+}
+

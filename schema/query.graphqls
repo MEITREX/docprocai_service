@@ -1,0 +1,57 @@
+type Query {
+    semanticSearch(query: String!, count: Int = 10): [SemanticSearchResult!]!
+}
+
+interface SemanticSearchResult {
+    """
+    The similarity score of the search result.
+    """
+    score: Float!
+    """
+    UUID of the media record this search result references.
+    """
+    mediaRecordId: UUID!
+}
+
+type SemanticSearchDocumentResult implements SemanticSearchResult {
+    """
+    The similarity score of the search result.
+    """
+    score: Float!
+    """
+    UUID of the media record this search result references.
+    """
+    mediaRecordId: UUID!
+    """
+    Page of the document this search result references.
+    """
+    page: Int!
+    """
+    The text snippet of the document this search result references.
+    """
+    text: String!
+}
+
+type SemanticSearchVideoResult implements SemanticSearchResult {
+    """
+    The similarity score of the search result.
+    """
+    score: Float!
+    """
+    UUID of the media record this search result references.
+    """
+    mediaRecordId: UUID!
+    """
+    Start time in seconds of the snippet of the video this search result references.
+    """
+    startTime: Int!
+    """
+    Text on the screen during this video snippet.
+    """
+    screenText: String!
+    """
+    Textual transcript of the spoken text during the video snippet this search result references.
+    """
+    transcript: String!
+}
+
