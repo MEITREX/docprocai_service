@@ -1,14 +1,19 @@
+import asyncio
+
 from pgvector.psycopg import register_vector
 import psycopg
 import fileextractlib.LlamaRunner as LlamaRunner
 import threading
 import queue
-from typing import Callable, Self
+from typing import Callable, Self, Awaitable
 import uuid
 import client.MediaServiceClient as MediaServiceClient
 from fileextractlib.LecturePdfEmbeddingGenerator import LecturePdfEmbeddingGenerator
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class DocProcAiService:
@@ -67,30 +72,32 @@ class DocProcAiService:
         self._keep_background_task_thread_alive = False
 
     def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
-        media_record = self._media_service_client.get_media_record_type_and_download_url(media_record_id)
-        download_url = media_record["downloadUrl"]
+        async def ingest_media_record_task():
+            media_record = await self._media_service_client.get_media_record_type_and_download_url(media_record_id)
+            download_url = media_record["downloadUrl"]
+            record_type: str = media_record["type"]
 
-        def ingest_document_task():
-            embeddings = self._lecture_pdf_embedding_generator.generate_embedding(download_url)
-            for embedding, text, page_no in embeddings:
-                self._db_conn.execute(
-                    query="INSERT INTO documents (text, mediaRecord, page, embedding) VALUES (%s, %s, %s, %s)",
-                    params=(text, media_record_id, page_no, embedding))
+            _logger.debug("Ingesting media record with download URL: " + download_url)
 
-        def ingest_video_task():
-            embeddings = self._lecture_video_embedding_generator.generate_embeddings(download_url)
-            for embedding, screen_text, transcript, start_time in embeddings:
-                self._db_conn.execute(
-                    query="INSERT INTO videos (screenText, transcript, mediaRecord, startTime, embedding) "
-                          + "VALUES (%s, %s, %s, %s, %s)",
-                    params=(screen_text, transcript, media_record_id, start_time, embedding))
+            if record_type == "PRESENTATION" or record_type == "DOCUMENT":
+                embeddings = self._lecture_pdf_embedding_generator.generate_embedding(download_url)
+                for embedding, text, page_no in embeddings:
+                    self._db_conn.execute(
+                        query="INSERT INTO documents (text, mediaRecord, page, embedding) VALUES (%s, %s, %s, %s)",
+                        params=(text, media_record_id, page_no, embedding))
+            elif record_type == "VIDEO":
+                embeddings = self._lecture_video_embedding_generator.generate_embeddings(download_url)
+                for embedding, screen_text, transcript, start_time in embeddings:
+                    self._db_conn.execute(
+                        query="INSERT INTO videos (screenText, transcript, mediaRecord, startTime, embedding) "
+                              + "VALUES (%s, %s, %s, %s, %s)",
+                        params=(screen_text, transcript, media_record_id, start_time, embedding))
+            else:
+                raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
-        if media_record["type"] == "VIDEO":
-            self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_video_task, 0))
-        elif media_record["type"] == "PRESENTATION" or media_record["type"] == "DOCUMENT":
-            self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_document_task, 0))
-        else:
-            raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
+            _logger.debug("Finished ingesting media record with download URL: " + download_url)
+
+        self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, 0))
 
     def semantic_search(self, query_text: str, count: int) -> dict[str, any]:
         query_embedding = self._sentence_embedding_runner.generate_embeddings([query_text])[0]
@@ -144,8 +151,8 @@ class DocProcAiService:
         return query_result
 
     class BackgroundTaskItem:
-        def __init__(self, task: Callable[[], None], priority: int):
-            self.task: Callable[[], None] = task
+        def __init__(self, task: Callable[[], Awaitable[None]], priority: int):
+            self.task: Callable[[], Awaitable[None]] = task
             self.priority: int = priority
 
         def __lt__(self, other: Self):
@@ -159,5 +166,5 @@ def _background_task_runner(task_queue: queue.PriorityQueue[DocProcAiService.Bac
             background_task_item = task_queue.get(block=True, timeout=1)
         except queue.Empty:
             continue
-        background_task_item.task()
+        asyncio.run(background_task_item.task())
         task_queue.task_done()

@@ -10,7 +10,7 @@ class MediaServiceClient:
         transport = gql.transport.aiohttp.AIOHTTPTransport(url="http:///app-media:3001/graphql")
         self._client = gql.Client(transport=transport, fetch_schema_from_transport=True)
 
-    def get_media_record_type_and_download_url(self, document_id: uuid.UUID) -> dict:
+    async def get_media_record_type_and_download_url(self, document_id: uuid.UUID) -> dict:
         query = gql.gql(
             """
             query GetDocumentDownloadUrl($recordId: UUID!) {
@@ -22,5 +22,5 @@ class MediaServiceClient:
             """
         )
         variables = {"recordId": document_id}
-        result = self._client.execute(query, variable_values=variables)
+        result = await self._client.execute_async(query, variable_values=variables)
         return result["_internal_noauth_mediaRecordsByIds"][0]
