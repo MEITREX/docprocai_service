@@ -6,6 +6,7 @@ from os import path
 import argparse
 import requests
 
+
 class PdfProcessor:
     """
      Can be used to convert documents in pdf format into raw text

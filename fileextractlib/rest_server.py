@@ -3,7 +3,7 @@ import SentenceEmbeddingRunner
 from pydantic import BaseModel
 import LlamaRunner
 import TranscriptGenerator as TranscriptGenerator
-import PdfProcessor as PdfProcessor
+import fileextractlib.PdfProcessor as PdfProcessor
 import uvicorn
 from pgvector.psycopg import register_vector
 import psycopg

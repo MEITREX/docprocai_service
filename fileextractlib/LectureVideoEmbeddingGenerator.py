@@ -1,13 +1,14 @@
 from webvtt import WebVTT
-from TranscriptGenerator import TranscriptGenerator
+from fileextractlib.TranscriptGenerator import TranscriptGenerator
 import ffmpeg
 import pytesseract
 import PIL
 import io
 import time
 import Levenshtein
-import SentenceEmbeddingRunner
+import fileextractlib.SentenceEmbeddingRunner as SentenceEmbeddingRunner
 from torch import Tensor
+
 
 class LectureVideoEmbeddingGenerator:
     screen_text_similarity_threshold: float = 0.8

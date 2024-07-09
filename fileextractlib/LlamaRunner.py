@@ -5,6 +5,7 @@ from lmformatenforcer.integrations.transformers import build_transformers_prefix
 import pydantic
 from transformers.pipelines.base import Pipeline
 
+
 class LlamaRunner:
     def __init_(self, model_id: str = "meta-llama/Meta-Llama-3-8B"):
         self.model_id = model_id

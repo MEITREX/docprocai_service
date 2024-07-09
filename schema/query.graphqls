@@ -1,5 +1,13 @@
 type Query {
-    semanticSearch(query: String!, count: Int = 10): [SemanticSearchResult!]!
+    semanticSearch(queryText: String!,
+        count: Int = 10,
+        filteredDocuments: [UUID!]! = [],
+        filterType: SemanticSearchDocumentFilterType! = BLACKLIST): [SemanticSearchResult!]!
+}
+
+enum SemanticSearchDocumentFilterType {
+    BLACKLIST,
+    WHITELIST
 }
 
 interface SemanticSearchResult {

@@ -1,4 +1,4 @@
-FROM python:3.10
+FROM python:3.12
 
 # store application data in /app in the container volume
 WORKDIR /app
@@ -13,4 +13,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 # copy the current directory contents into the container at /app
 COPY . .
 
-CMD ["python", "./src/app.py"]
+CMD ["python", "./app.py"]
