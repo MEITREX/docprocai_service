@@ -18,7 +18,8 @@ class LecturePdfEmbeddingGenerator:
         # remove null and empty strings
         filtered_pages = [x for x in pages if x["text"] is not None and x["text"].strip()]
 
-        embeddings = SentenceEmbeddingRunner.generate_embeddings([x["text"] for x in filtered_pages])
+        sentence_embedding_runner = SentenceEmbeddingRunner.SentenceEmbeddingRunner()
+        embeddings = sentence_embedding_runner.generate_embeddings([x["text"] for x in filtered_pages])
 
         results: list[LecturePdfEmbeddingGenerator.GenerateEmbeddingResult] = []
 

@@ -13,6 +13,8 @@ def create_app():
 
     query = ariadne.QueryType()
     mutation = ariadne.MutationType()
+    semantic_search_result_interface = ariadne.InterfaceType("SemanticSearchResult")
+    uuid_scalar = ariadne.ScalarType("UUID")
 
     @mutation.field("_internal_noauth_ingestMediaRecord")
     def _internal_noauth_ingest_media_record(parent, info, input):
@@ -20,12 +22,30 @@ def create_app():
         service.enqueue_ingest_media_record_task(document_id)
         return document_id
 
-    @query.field("semanticSearch")
-    def semantic_search(parent, info, queryText: str, count: int, filteredDocuments: list[uuid.UUID], filterType: str):
+    @query.field("_internal_noauth_semanticSearch")
+    def semantic_search(parent, info, queryText: str, count: int,
+                        mediaRecordBlacklist: list[uuid.UUID], mediaRecordWhitelist: list[uuid.UUID]):
         # TODO: Implement filtering
-        return service.semantic_search(queryText, count)
+        return service.semantic_search(queryText, count, mediaRecordBlacklist, mediaRecordWhitelist)
 
-    schema = ariadne.make_executable_schema(schema, query, mutation)
+    @semantic_search_result_interface.type_resolver
+    def resolve_semantic_search_result_type(obj, *_):
+        if obj["source"] == "document":
+            return "SemanticSearchDocumentResult"
+        elif obj["source"] == "video":
+            return "SemanticSearchVideoResult"
+        else:
+            raise ValueError("Unknown source type: " + obj["source"])
+
+    @uuid_scalar.serializer
+    def serialize_uuid(value):
+        return str(value)
+
+    @uuid_scalar.value_parser
+    def parse_uuid_value(value):
+        return uuid.UUID(value)
+
+    schema = ariadne.make_executable_schema(schema, query, mutation, semantic_search_result_interface, uuid_scalar)
     app = ariadne.asgi.GraphQL(schema, debug=True)
 
     return app

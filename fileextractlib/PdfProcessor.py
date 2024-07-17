@@ -5,6 +5,9 @@ import pytesseract
 from os import path
 import argparse
 import requests
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class PdfProcessor:
@@ -29,7 +32,7 @@ class PdfProcessor:
     
     def process_from_url(self, file_url: str) -> list:
         res = requests.get(file_url)
-        
+
         doc = convert_from_bytes(res.content)
         os.environ['OMP_THREAD_LIMIT'] = '20'
 

@@ -34,17 +34,17 @@ class DocProcAiService:
 
         # ensure database tables exist
         self._db_conn.execute("CREATE TABLE IF NOT EXISTS documents "
-                              + "(PRIMARY KEY(mediaRecord, page), "
+                              + "(PRIMARY KEY(media_record, page), "
                               + "text text, "
-                              + "mediaRecord uuid, "
+                              + "media_record uuid, "
                               + "page int, "
                               + "embedding vector(1024))")
         self._db_conn.execute("CREATE TABLE IF NOT EXISTS videos "
-                              + "(PRIMARY KEY(mediaRecord, startTime), "
-                              + "screenText text, "
+                              + "(PRIMARY KEY(media_record, start_time), "
+                              + "screen_text text, "
                               + "transcript text, "
-                              + "mediaRecord uuid, "
-                              + "startTime int, "
+                              + "media_record uuid, "
+                              + "start_time int, "
                               + "embedding vector(1024))")
 
         # graphql client for interacting with the media service
@@ -74,70 +74,86 @@ class DocProcAiService:
     def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
         async def ingest_media_record_task():
             media_record = await self._media_service_client.get_media_record_type_and_download_url(media_record_id)
-            download_url = media_record["downloadUrl"]
+            download_url = media_record["internalDownloadUrl"]
+
             record_type: str = media_record["type"]
 
-            _logger.debug("Ingesting media record with download URL: " + download_url)
+            _logger.info("Ingesting media record with download URL: " + download_url)
 
             if record_type == "PRESENTATION" or record_type == "DOCUMENT":
-                embeddings = self._lecture_pdf_embedding_generator.generate_embedding(download_url)
-                for embedding, text, page_no in embeddings:
+                embedding_results = self._lecture_pdf_embedding_generator.generate_embedding(download_url)
+                for embedding_result in embedding_results:
                     self._db_conn.execute(
-                        query="INSERT INTO documents (text, mediaRecord, page, embedding) VALUES (%s, %s, %s, %s)",
-                        params=(text, media_record_id, page_no, embedding))
+                        query="INSERT INTO documents (text, media_record, page, embedding) VALUES (%s, %s, %s, %s)",
+                        params=(embedding_result.text, media_record_id, embedding_result.page_number,
+                                embedding_result.embedding))
             elif record_type == "VIDEO":
-                embeddings = self._lecture_video_embedding_generator.generate_embeddings(download_url)
-                for embedding, screen_text, transcript, start_time in embeddings:
+                embedding_results = self._lecture_video_embedding_generator.generate_embeddings(download_url)
+                for embedding_result in embedding_results:
                     self._db_conn.execute(
-                        query="INSERT INTO videos (screenText, transcript, mediaRecord, startTime, embedding) "
+                        query="INSERT INTO videos (screen_text, transcript, media_record, start_time, embedding) "
                               + "VALUES (%s, %s, %s, %s, %s)",
-                        params=(screen_text, transcript, media_record_id, start_time, embedding))
+                        params=(embedding_result.screen_text, embedding_result.transcript, media_record_id,
+                                embedding_result.start_time, embedding_result.embedding))
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
-            _logger.debug("Finished ingesting media record with download URL: " + download_url)
+            _logger.info("Finished ingesting media record with download URL: " + download_url)
 
         self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, 0))
 
-    def semantic_search(self, query_text: str, count: int) -> dict[str, any]:
+    def semantic_search(self,
+                        query_text: str,
+                        count: int,
+                        mediaRecordBlacklist: list[uuid.UUID],
+                        mediaRecordWhitelist: list[uuid.UUID]) -> dict[str, any]:
         query_embedding = self._sentence_embedding_runner.generate_embeddings([query_text])[0]
 
         # sql query to get the closest embeddings to the query embedding, both from the video and document tables
         query = """
             WITH document_results AS (
                 SELECT
-                    mediaRecord,
+                    media_record AS "mediaRecordId",
                     'document' AS source,
                     page,
-                    NULL::integer AS startTime,
+                    NULL::integer AS "startTime",
                     text,
-                    NULL::text AS screenText,
+                    NULL::text AS "screenText",
                     NULL::text AS transcript,
-                    embedding <=> %s AS distance
+                    embedding <=> %(query_embedding)s AS score
                 FROM documents
+                WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
             ),
             video_results AS (
-                SELECT origin_file,
+                SELECT 
+                    media_record AS "mediaRecordId",
                     'video' AS source,
                     NULL::integer AS page,
-                    start_time,
+                    start_time AS "startTime",
                     NULL::text AS text,
-                    screen_text,
+                    screen_text AS "screenText",
                     transcript,
-                    embedding <=> %s AS distance
+                    embedding <=> %(query_embedding)s AS score
                 FROM videos
+                WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
             ),
             results AS (
                 SELECT * FROM document_results
                 UNION ALL
                 SELECT * FROM video_results
             )
-            SELECT * FROM results ORDER BY distance LIMIT %s
+            SELECT * FROM results ORDER BY score LIMIT %(count)s
         """
 
-        query_result = self._db_conn.execute(query=query, params=(query_embedding, query_embedding, count)).fetchall()
+        query_result = self._db_conn.execute(query=query, params={
+            "query_embedding": query_embedding,
+            "count": count,
+            "mediaRecordBlacklist": mediaRecordBlacklist,
+            "mediaRecordWhitelist": mediaRecordWhitelist
+        }).fetchall()
 
         for result in query_result:
+            _logger.error(result)
             if result["source"] == "document":
                 del result["startTime"]
                 del result["screenText"]
@@ -145,8 +161,6 @@ class DocProcAiService:
             elif result["source"] == "video":
                 del result["page"]
                 del result["text"]
-            # TODO: Delete this or not?
-            del result["source"]
 
         return query_result
 
