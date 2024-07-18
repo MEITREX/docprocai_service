@@ -1,13 +1,8 @@
 type Query {
-    semanticSearch(queryText: String!,
+    _internal_noauth_semanticSearch(queryText: String!,
         count: Int = 10,
-        filteredDocuments: [UUID!]! = [],
-        filterType: SemanticSearchDocumentFilterType! = BLACKLIST): [SemanticSearchResult!]!
-}
-
-enum SemanticSearchDocumentFilterType {
-    BLACKLIST,
-    WHITELIST
+        mediaRecordBlacklist: [UUID!]! = [],
+        mediaRecordWhitelist: [UUID!]! = []) : [SemanticSearchResult!]!
 }
 
 interface SemanticSearchResult {
