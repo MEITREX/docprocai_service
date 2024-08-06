@@ -102,6 +102,10 @@ class DocProcAiService:
 
         self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, 0))
 
+    def delete_entries_of_media_record(self, media_record_id: uuid.UUID):
+        self._db_conn.execute("DELETE FROM documents WHERE media_record = %s", (media_record_id,))
+        self._db_conn.execute("DELETE FROM videos WHERE media_record = %s", (media_record_id,))
+
     def semantic_search(self,
                         query_text: str,
                         count: int,
