@@ -24,6 +24,13 @@ class GraphQLController:
             ai_service.enqueue_ingest_media_record_task(document_id)
             return document_id
 
+        @mutation.field("_internal_noauth_enqueueGenerateMediaRecordLinksForContent")
+        def _internal_noauth_enqueue_generate_media_record_links_for_content(parent, info, input):
+            content_id: uuid.UUID = input["contentId"]
+            media_record_ids: list[uuid.UUID] = [uuid.UUID(x) for x in input["mediaRecordIds"]]
+
+            ai_service.enqueue_generate_content_media_record_links(content_id, media_record_ids)
+
         @query.field("_internal_noauth_semanticSearch")
         def semantic_search(parent, info, queryText: str, count: int,
                             mediaRecordBlacklist: list[uuid.UUID], mediaRecordWhitelist: list[uuid.UUID]):

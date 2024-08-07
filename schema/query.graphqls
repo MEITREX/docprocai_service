@@ -3,24 +3,30 @@ type Query {
         count: Int = 10,
         mediaRecordBlacklist: [UUID!]! = [],
         mediaRecordWhitelist: [UUID!]! = []) : [SemanticSearchResult!]!
+
+    _internal_noauth_getMediaRecordLinksForContent(contentId: UUID!): [FineGrainedMediaRecordLink!]!
 }
 
-interface SemanticSearchResult {
+type FineGrainedMediaRecordLink {
+    fineGrainedMediaRecordReferences: [FineGrainedMediaRecordReference!]!
+}
+
+type SemanticSearchResult {
     """
     The similarity score of the search result.
     """
     score: Float!
+    fineGrainedMediaRecordReference: FineGrainedMediaRecordReference!
+}
+
+interface FineGrainedMediaRecordReference {
     """
     UUID of the media record this search result references.
     """
     mediaRecordId: UUID!
 }
 
-type SemanticSearchDocumentResult implements SemanticSearchResult {
-    """
-    The similarity score of the search result.
-    """
-    score: Float!
+type DocumentRecordReference implements FineGrainedMediaRecordReference {
     """
     UUID of the media record this search result references.
     """
@@ -35,11 +41,7 @@ type SemanticSearchDocumentResult implements SemanticSearchResult {
     text: String!
 }
 
-type SemanticSearchVideoResult implements SemanticSearchResult {
-    """
-    The similarity score of the search result.
-    """
-    score: Float!
+type VideoRecordReference implements FineGrainedMediaRecordReference {
     """
     UUID of the media record this search result references.
     """

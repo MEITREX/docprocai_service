@@ -70,6 +70,7 @@ class DocProcAiService:
 
     def __del__(self):
         self._keep_background_task_thread_alive = False
+        self._db_conn.close()
 
     def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
         async def ingest_media_record_task():
@@ -100,7 +101,19 @@ class DocProcAiService:
 
             _logger.info("Finished ingesting media record with download URL: " + download_url)
 
-        self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, 0))
+        priority = 0
+        self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, priority))
+
+    def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID, media_record_ids: list[uuid.UUID]):
+        async def generate_content_media_record_links_task():
+            pass
+
+        # priority of media record link generation needs to be higher than that of media record ingestion (higher
+        # priority items are processed last), so that the media records which are being linked have been processed
+        # before being linked
+        priority = 1
+        self._background_task_queue.put(
+            DocProcAiService.BackgroundTaskItem(generate_content_media_record_links_task, priority))
 
     def delete_entries_of_media_record(self, media_record_id: uuid.UUID):
         self._db_conn.execute("DELETE FROM documents WHERE media_record = %s", (media_record_id,))
