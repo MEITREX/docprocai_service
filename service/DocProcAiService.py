@@ -12,6 +12,7 @@ from fileextractlib.LecturePdfEmbeddingGenerator import LecturePdfEmbeddingGener
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
 import logging
+import Levenshtein
 
 _logger = logging.getLogger(__name__)
 
@@ -106,7 +107,71 @@ class DocProcAiService:
 
     def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID, media_record_ids: list[uuid.UUID]):
         async def generate_content_media_record_links_task():
-            pass
+            query = """
+            WITH document_results AS (
+                SELECT
+                    media_record AS "mediaRecordId",
+                    'document' AS source,
+                    page,
+                    NULL::integer AS "startTime",
+                    text AS "text"
+                FROM documents
+                WHERE media_record = ANY(%(mediaRecordIds)s)
+            ),
+            video_results AS (
+                SELECT 
+                    media_record AS "mediaRecordId",
+                    'video' AS source,
+                    NULL::integer AS page,
+                    start_time AS "startTime",
+                    screen_text AS "text"
+                FROM videos
+                WHERE media_record = ANY(%(mediaRecordIds)s)
+            ),
+            results AS (
+                SELECT * FROM document_results
+                UNION ALL
+                SELECT * FROM video_results
+            )
+            SELECT * FROM results
+            """
+
+            # we could first run a query to check if any records even match, but considering that linking usually only
+            # happens after ingestion, we can assume that the records exist, so that would be an unnecessary query
+            query_result = self._db_conn.execute(query=query, params={"mediaRecordIds": media_record_ids}).fetchall()
+
+            # create separate lists of records for each media record
+            media_records_segments = {}
+            # group the results by media record id
+            for result in query_result:
+                media_record_id = result["mediaRecordId"]
+                if media_record_id not in media_records_segments:
+                    media_records_segments[media_record_id] = []
+                media_records_segments[media_record_id].append(result)
+
+            # now we can check for links
+
+            # go through each media record's segments
+            for media_record_id, segments in media_records_segments.items():
+                for segment in segments:
+                    # get the text of the segment
+                    segment_text = segment["text"]
+                    # go through each other media record's segments
+                    for other_media_record_id, other_segments in media_records_segments.items():
+                        # skip if the other media record is the same as the current one
+                        if other_media_record_id == media_record_id:
+                            continue
+                        for other_segment in other_segments:
+                            other_segment_text = other_segment["text"]
+                            # calculate the levenshtein distance between the two texts
+                            levenshtein_distance = Levenshtein.distance(segment_text, other_segment_text)
+                            # if the distance is less than 10, we can assume that the two segments are similar
+                            if levenshtein_distance < 10:
+                                # insert a link between the two segments
+                                # TODO
+                                pass
+
+
 
         # priority of media record link generation needs to be higher than that of media record ingestion (higher
         # priority items are processed last), so that the media records which are being linked have been processed
