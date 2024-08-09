@@ -35,18 +35,23 @@ class DocProcAiService:
 
         # ensure database tables exist
         self._db_conn.execute("CREATE TABLE IF NOT EXISTS documents "
-                              + "(PRIMARY KEY(media_record, page), "
+                              + "id uuid PRIMARY KEY, "
                               + "text text, "
                               + "media_record uuid, "
                               + "page int, "
-                              + "embedding vector(1024))")
+                              + "embedding vector(1024));")
         self._db_conn.execute("CREATE TABLE IF NOT EXISTS videos "
-                              + "(PRIMARY KEY(media_record, start_time), "
+                              + "id uuid PRIMARY KEY, "
                               + "screen_text text, "
                               + "transcript text, "
                               + "media_record uuid, "
                               + "start_time int, "
-                              + "embedding vector(1024))")
+                              + "embedding vector(1024));")
+        self._db_conn.execute("CREATE TABLE IF NOT EXISTS media_record_links "
+                              + "segment1 uuid, "
+                              + "segment2 uuid, "
+                              + "FOREIGN KEY (segment1) REFERENCES documents(id), "
+                              + "FOREIGN KEY (segment2) REFERENCES documents(id));")
 
         # graphql client for interacting with the media service
         self._media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
@@ -110,6 +115,7 @@ class DocProcAiService:
             query = """
             WITH document_results AS (
                 SELECT
+                    id,
                     media_record AS "mediaRecordId",
                     'document' AS source,
                     page,
@@ -120,6 +126,7 @@ class DocProcAiService:
             ),
             video_results AS (
                 SELECT 
+                    id,
                     media_record AS "mediaRecordId",
                     'video' AS source,
                     NULL::integer AS page,
@@ -150,7 +157,6 @@ class DocProcAiService:
                 media_records_segments[media_record_id].append(result)
 
             # now we can check for links
-
             # go through each media record's segments
             for media_record_id, segments in media_records_segments.items():
                 for segment in segments:
@@ -162,16 +168,18 @@ class DocProcAiService:
                         if other_media_record_id == media_record_id:
                             continue
                         for other_segment in other_segments:
+                            # skip if a link between these segments already exists
+                            if self.does_link_between_media_record_segments_exist(segment["id"], other_segment["id"]):
+                                continue
+
                             other_segment_text = other_segment["text"]
                             # calculate the levenshtein distance between the two texts
-                            levenshtein_distance = Levenshtein.distance(segment_text, other_segment_text)
-                            # if the distance is less than 10, we can assume that the two segments are similar
-                            if levenshtein_distance < 10:
-                                # insert a link between the two segments
-                                # TODO
-                                pass
-
-
+                            levenshtein_ratio = Levenshtein.ratio(segment_text, other_segment_text)
+                            # if the ratio is larger than 0.9, we can assume that the two segments are similar
+                            # TODO: Make this configurable
+                            if levenshtein_ratio > 0.9:
+                                # create a link between the two segments
+                                self.create_link_between_media_record_segments(segment["id"], other_segment["id"])
 
         # priority of media record link generation needs to be higher than that of media record ingestion (higher
         # priority items are processed last), so that the media records which are being linked have been processed
@@ -180,15 +188,35 @@ class DocProcAiService:
         self._background_task_queue.put(
             DocProcAiService.BackgroundTaskItem(generate_content_media_record_links_task, priority))
 
+    def create_link_between_media_record_segments(self, segment_id: uuid.UUID, other_segment_id: uuid.UUID):
+        self._db_conn.execute("INSERT INTO media_record_links (segment1, segment2) VALUES (%s, %s)",
+                              (segment_id, other_segment_id))
+
+    def does_link_between_media_record_segments_exist(self, segment_id: uuid.UUID, other_segment_id: uuid.UUID) -> bool:
+        return self._db_conn.execute("""
+        SELECT EXISTS(
+            SELECT 1 FROM media_record_links 
+            WHERE (segment1 = %(id1)s AND segment2 = %(id2)s) 
+                OR (segment1 = %(id2)s AND segment2 = %(id1)s)
+        )
+        """, {"id1": segment_id, "id2": other_segment_id}).fetchone()
+
     def delete_entries_of_media_record(self, media_record_id: uuid.UUID):
-        self._db_conn.execute("DELETE FROM documents WHERE media_record = %s", (media_record_id,))
-        self._db_conn.execute("DELETE FROM videos WHERE media_record = %s", (media_record_id,))
+        # delete media record segment links
+        self._db_conn.execute("DELETE FROM media_record_links WHERE segment1 = %s OR segment2 = %s",
+                              (media_record_id,))
+
+        # delete media record segments
+        self._db_conn.execute("DELETE FROM documents WHERE media_record = %s",
+                              (media_record_id,))
+        self._db_conn.execute("DELETE FROM videos WHERE media_record = %s",
+                              (media_record_id,))
 
     def semantic_search(self,
                         query_text: str,
                         count: int,
-                        mediaRecordBlacklist: list[uuid.UUID],
-                        mediaRecordWhitelist: list[uuid.UUID]) -> dict[str, any]:
+                        media_record_blacklist: list[uuid.UUID],
+                        media_record_whitelist: list[uuid.UUID]) -> dict[str, any]:
         query_embedding = self._sentence_embedding_runner.generate_embeddings([query_text])[0]
 
         # sql query to get the closest embeddings to the query embedding, both from the video and document tables
@@ -230,8 +258,8 @@ class DocProcAiService:
         query_result = self._db_conn.execute(query=query, params={
             "query_embedding": query_embedding,
             "count": count,
-            "mediaRecordBlacklist": mediaRecordBlacklist,
-            "mediaRecordWhitelist": mediaRecordWhitelist
+            "mediaRecordBlacklist": media_record_blacklist,
+            "mediaRecordWhitelist": media_record_whitelist
         }).fetchall()
 
         for result in query_result:
