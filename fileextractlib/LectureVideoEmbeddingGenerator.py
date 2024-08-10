@@ -1,3 +1,5 @@
+import sys
+
 from webvtt import WebVTT
 from fileextractlib.TranscriptGenerator import TranscriptGenerator
 import ffmpeg
@@ -6,7 +8,7 @@ import PIL
 import io
 import time
 import Levenshtein
-import fileextractlib.SentenceEmbeddingRunner as SentenceEmbeddingRunner
+from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
 from torch import Tensor
 
 
@@ -59,8 +61,10 @@ class LectureVideoEmbeddingGenerator:
         # delete ffmpeg output, we don't need it anymore
         del out
 
-        # we will now create longer sections from our captions. Captions usually have a length of a sentence or a part of a sentence.
-        # We extracted images at the start of each caption, now we will check when the video changes significantly and create a new section,
+        # we will now create longer sections from our captions. Captions usually have a length of a sentence or a
+        # part of a sentence.
+        # We extracted images at the start of each caption, now we will check when the video changes significantly and
+        # create a new section,
         # merging the captions within the timespan of that section
         sections: list[LectureVideoEmbeddingGenerator.Section] = []
         current_section = None
@@ -97,7 +101,8 @@ class LectureVideoEmbeddingGenerator:
                         embedding=None)
 
         for section in sections:
-            section.embedding = SentenceEmbeddingRunner.generate_embeddings([section.transcript + "\n\n" + section.screen_text])[0]
+            sentence_embedding_runner = SentenceEmbeddingRunner()
+            section.embedding = sentence_embedding_runner.generate_embeddings([section.transcript + "\n\n" + section.screen_text])[0]
 
         return sections
 
@@ -105,6 +110,6 @@ class LectureVideoEmbeddingGenerator:
 if __name__ == "__main__":
     start_time = time.time()
     generator = LectureVideoEmbeddingGenerator()
-    generator.generate_embedding(r"E:\Lukas\Downloads\LLM-Lehrmaterial\LLM-Lehrmaterial\Marco Aiello\ Lecture videos\DS\20 Distributed Transactions.mp4")
+    generator.generate_embeddings(sys.argv[1])
     end_time = time.time()
     print("Embedding generated successfully in " + str(end_time - start_time) + " seconds.")

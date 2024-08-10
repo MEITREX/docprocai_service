@@ -4,11 +4,12 @@ type Query {
         mediaRecordBlacklist: [UUID!]! = [],
         mediaRecordWhitelist: [UUID!]! = []) : [SemanticSearchResult!]!
 
-    _internal_noauth_getMediaRecordLinksForContent(contentId: UUID!): [FineGrainedMediaRecordLink!]!
+    _internal_noauth_getMediaRecordLinksForContent(contentId: UUID!): [MediaRecordSegmentLink!]!
 }
 
-type FineGrainedMediaRecordLink {
-    fineGrainedMediaRecordReferences: [FineGrainedMediaRecordReference!]!
+type MediaRecordSegmentLink {
+    segment1: MediaRecordSegment!
+    segment2: MediaRecordSegment!
 }
 
 type SemanticSearchResult {
@@ -16,17 +17,25 @@ type SemanticSearchResult {
     The similarity score of the search result.
     """
     score: Float!
-    fineGrainedMediaRecordReference: FineGrainedMediaRecordReference!
+    mediaRecordSegment: MediaRecordSegment!
 }
 
-interface FineGrainedMediaRecordReference {
+interface MediaRecordSegment {
     """
-    UUID of the media record this search result references.
+    UUID of this segment.
+    """
+    id: UUID!
+    """
+    UUID of the media record this segment is part of.
     """
     mediaRecordId: UUID!
 }
 
-type DocumentRecordReference implements FineGrainedMediaRecordReference {
+type DocumentRecordSegment implements MediaRecordSegment {
+    """
+    UUID of this segment.
+    """
+    id: UUID!
     """
     UUID of the media record this search result references.
     """
@@ -41,7 +50,11 @@ type DocumentRecordReference implements FineGrainedMediaRecordReference {
     text: String!
 }
 
-type VideoRecordReference implements FineGrainedMediaRecordReference {
+type VideoRecordSegment implements MediaRecordSegment {
+    """
+    UUID of this segment.
+    """
+    id: UUID!
     """
     UUID of the media record this search result references.
     """

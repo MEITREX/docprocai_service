@@ -15,21 +15,22 @@ class GraphQLController:
 
         query = ariadne.QueryType()
         mutation = ariadne.MutationType()
-        semantic_search_result_interface = ariadne.InterfaceType("SemanticSearchResult")
+        media_record_segment_interface = ariadne.InterfaceType("MediaRecordSegment")
         uuid_scalar = ariadne.ScalarType("UUID")
 
         @mutation.field("_internal_noauth_ingestMediaRecord")
         def _internal_noauth_ingest_media_record(parent, info, input):
-            document_id: uuid.UUID = input["id"]
-            ai_service.enqueue_ingest_media_record_task(document_id)
-            return document_id
+            media_record_id: uuid.UUID = input["id"]
+            ai_service.enqueue_ingest_media_record_task(media_record_id)
+            return media_record_id
 
         @mutation.field("_internal_noauth_enqueueGenerateMediaRecordLinksForContent")
         def _internal_noauth_enqueue_generate_media_record_links_for_content(parent, info, input):
             content_id: uuid.UUID = input["contentId"]
-            media_record_ids: list[uuid.UUID] = [uuid.UUID(x) for x in input["mediaRecordIds"]]
+            media_record_ids: list[uuid.UUID] = [x for x in input["mediaRecordIds"]]
 
             ai_service.enqueue_generate_content_media_record_links(content_id, media_record_ids)
+            return content_id
 
         @query.field("_internal_noauth_semanticSearch")
         def semantic_search(parent, info, queryText: str, count: int,
@@ -37,12 +38,16 @@ class GraphQLController:
             # TODO: Implement filtering
             return ai_service.semantic_search(queryText, count, mediaRecordBlacklist, mediaRecordWhitelist)
 
-        @semantic_search_result_interface.type_resolver
+        @query.field("_internal_noauth_getMediaRecordLinksForContent")
+        def get_media_record_links_for_content(parent, info, contentId: uuid.UUID):
+            return ai_service.get_media_record_links_for_content(contentId)
+
+        @media_record_segment_interface.type_resolver
         def resolve_semantic_search_result_type(obj, *_):
             if obj["source"] == "document":
-                return "SemanticSearchDocumentResult"
+                return "DocumentRecordSegment"
             elif obj["source"] == "video":
-                return "SemanticSearchVideoResult"
+                return "VideoRecordSegment"
             else:
                 raise ValueError("Unknown source type: " + obj["source"])
 
@@ -57,7 +62,7 @@ class GraphQLController:
         schema = ariadne.make_executable_schema(schema,
                                                 query,
                                                 mutation,
-                                                semantic_search_result_interface,
+                                                media_record_segment_interface,
                                                 uuid_scalar)
         controller = ariadne.asgi.GraphQL(schema, debug=True)
         app.mount("/graphql", controller)

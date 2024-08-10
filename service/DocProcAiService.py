@@ -34,24 +34,32 @@ class DocProcAiService:
         # db_conn.execute("DROP TABLE IF EXISTS videos")
 
         # ensure database tables exist
-        self._db_conn.execute("CREATE TABLE IF NOT EXISTS documents "
-                              + "id uuid PRIMARY KEY, "
-                              + "text text, "
-                              + "media_record uuid, "
-                              + "page int, "
-                              + "embedding vector(1024));")
-        self._db_conn.execute("CREATE TABLE IF NOT EXISTS videos "
-                              + "id uuid PRIMARY KEY, "
-                              + "screen_text text, "
-                              + "transcript text, "
-                              + "media_record uuid, "
-                              + "start_time int, "
-                              + "embedding vector(1024));")
-        self._db_conn.execute("CREATE TABLE IF NOT EXISTS media_record_links "
-                              + "segment1 uuid, "
-                              + "segment2 uuid, "
-                              + "FOREIGN KEY (segment1) REFERENCES documents(id), "
-                              + "FOREIGN KEY (segment2) REFERENCES documents(id));")
+        self._db_conn.execute("""
+                              CREATE TABLE IF NOT EXISTS documents (
+                                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                                text text,
+                                media_record uuid,
+                                page int,
+                                embedding vector(1024)
+                              );
+                              """)
+        self._db_conn.execute("""
+                              CREATE TABLE IF NOT EXISTS videos (
+                                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                                screen_text text,
+                                transcript text,
+                                media_record uuid,
+                                start_time int,
+                                embedding vector(1024)
+                              );
+                              """)
+        self._db_conn.execute("""
+                              CREATE TABLE IF NOT EXISTS media_record_links (
+                                content_id uuid,
+                                segment1_id uuid,
+                                segment2_id uuid
+                              );
+                              """)
 
         # graphql client for interacting with the media service
         self._media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
@@ -111,7 +119,7 @@ class DocProcAiService:
         self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, priority))
 
     def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID, media_record_ids: list[uuid.UUID]):
-        async def generate_content_media_record_links_task():
+        def generate_content_media_record_links_task():
             query = """
             WITH document_results AS (
                 SELECT
@@ -148,13 +156,15 @@ class DocProcAiService:
             query_result = self._db_conn.execute(query=query, params={"mediaRecordIds": media_record_ids}).fetchall()
 
             # create separate lists of records for each media record
-            media_records_segments = {}
+            media_records_segments: dict[uuid.UUID, list] = {}
             # group the results by media record id
             for result in query_result:
-                media_record_id = result["mediaRecordId"]
+                media_record_id: uuid.UUID = result["mediaRecordId"]
                 if media_record_id not in media_records_segments:
                     media_records_segments[media_record_id] = []
                 media_records_segments[media_record_id].append(result)
+
+            print(media_records_segments.keys())
 
             # now we can check for links
             # go through each media record's segments
@@ -167,6 +177,7 @@ class DocProcAiService:
                         # skip if the other media record is the same as the current one
                         if other_media_record_id == media_record_id:
                             continue
+
                         for other_segment in other_segments:
                             # skip if a link between these segments already exists
                             if self.does_link_between_media_record_segments_exist(segment["id"], other_segment["id"]):
@@ -179,32 +190,43 @@ class DocProcAiService:
                             # TODO: Make this configurable
                             if levenshtein_ratio > 0.9:
                                 # create a link between the two segments
-                                self.create_link_between_media_record_segments(segment["id"], other_segment["id"])
+                                self.create_link_between_media_record_segments(content_id, segment["id"], other_segment["id"])
 
         # priority of media record link generation needs to be higher than that of media record ingestion (higher
         # priority items are processed last), so that the media records which are being linked have been processed
         # before being linked
         priority = 1
-        self._background_task_queue.put(
-            DocProcAiService.BackgroundTaskItem(generate_content_media_record_links_task, priority))
+        generate_content_media_record_links_task()
+        #self._background_task_queue.put(
+        #    DocProcAiService.BackgroundTaskItem(generate_content_media_record_links_task, priority))
 
-    def create_link_between_media_record_segments(self, segment_id: uuid.UUID, other_segment_id: uuid.UUID):
-        self._db_conn.execute("INSERT INTO media_record_links (segment1, segment2) VALUES (%s, %s)",
-                              (segment_id, other_segment_id))
+    def create_link_between_media_record_segments(self,
+                                                  content_id: uuid.UUID,
+                                                  segment_id: uuid.UUID,
+                                                  other_segment_id: uuid.UUID):
+        self._db_conn.execute("INSERT INTO media_record_links (content_id, segment1_id, segment2_id) "
+                              + "VALUES (%s, %s, %s)",
+                              (content_id, segment_id, other_segment_id))
 
     def does_link_between_media_record_segments_exist(self, segment_id: uuid.UUID, other_segment_id: uuid.UUID) -> bool:
-        return self._db_conn.execute("""
+        result = self._db_conn.execute("""
         SELECT EXISTS(
             SELECT 1 FROM media_record_links 
-            WHERE (segment1 = %(id1)s AND segment2 = %(id2)s) 
-                OR (segment1 = %(id2)s AND segment2 = %(id1)s)
+            WHERE (segment1_id = %(id1)s AND segment2_id = %(id2)s) 
+                OR (segment1_id = %(id2)s AND segment2_id = %(id1)s)
         )
         """, {"id1": segment_id, "id2": other_segment_id}).fetchone()
 
+        return result["exists"]
+
     def delete_entries_of_media_record(self, media_record_id: uuid.UUID):
         # delete media record segment links
-        self._db_conn.execute("DELETE FROM media_record_links WHERE segment1 = %s OR segment2 = %s",
-                              (media_record_id,))
+        self._db_conn.execute("""
+            DELETE FROM media_record_links 
+            WHERE segment1_id = %(media_record_id)s OR segment2_id = %(media_record_id)s""",
+                              {
+                                    "media_record_id": media_record_id
+                              })
 
         # delete media record segments
         self._db_conn.execute("DELETE FROM documents WHERE media_record = %s",
@@ -212,11 +234,73 @@ class DocProcAiService:
         self._db_conn.execute("DELETE FROM videos WHERE media_record = %s",
                               (media_record_id,))
 
+    def get_media_record_links_for_content(self, content_id: uuid.UUID):
+        result = self._db_conn.execute("""
+            SELECT
+                segment1_id AS "segment1Id",
+                segment2_id AS "segment2Id"
+            FROM media_record_links WHERE content_id = %s
+            """, (content_id,)).fetchall()
+
+        all_segment_ids = []
+        for segment_link in result:
+            all_segment_ids.append(segment_link["segment1Id"])
+            all_segment_ids.append(segment_link["segment2Id"])
+
+        result_segments = self._db_conn.execute("""
+            WITH document_results AS (
+                SELECT
+                    id,
+                    media_record AS "mediaRecordId",
+                    'document' AS source,
+                    page,
+                    NULL::integer AS "startTime",
+                    text,
+                    NULL::text AS "screenText",
+                    NULL::text AS transcript
+                FROM documents
+                WHERE id = ANY(%(segmentIds)s)
+            ),
+            video_results AS (
+                SELECT 
+                    id,
+                    media_record AS "mediaRecordId",
+                    'video' AS source,
+                    NULL::integer AS page,
+                    start_time AS "startTime",
+                    NULL::text AS text,
+                    screen_text AS "screenText",
+                    transcript
+                FROM videos
+                WHERE id = ANY(%(segmentIds)s)
+            ),
+            results AS (
+                SELECT * FROM document_results
+                UNION ALL
+                SELECT * FROM video_results
+            )
+            SELECT * FROM results;
+        """, {"segmentIds": all_segment_ids}).fetchall()
+
+        for x in result_segments:
+            if x["source"] == "document":
+                del x["startTime"]
+                del x["screenText"]
+                del x["transcript"]
+            elif x["source"] == "video":
+                del x["page"]
+                del x["text"]
+
+        return [{
+                    "segment1": next(x for x in result_segments if x["id"] == segment_link["segment1Id"]),
+                    "segment2": next(x for x in result_segments if x["id"] == segment_link["segment2Id"])
+                } for segment_link in result]
+
     def semantic_search(self,
                         query_text: str,
                         count: int,
                         media_record_blacklist: list[uuid.UUID],
-                        media_record_whitelist: list[uuid.UUID]) -> dict[str, any]:
+                        media_record_whitelist: list[uuid.UUID]) -> list[dict[str, any]]:
         query_embedding = self._sentence_embedding_runner.generate_embeddings([query_text])[0]
 
         # sql query to get the closest embeddings to the query embedding, both from the video and document tables
@@ -263,7 +347,6 @@ class DocProcAiService:
         }).fetchall()
 
         for result in query_result:
-            _logger.error(result)
             if result["source"] == "document":
                 del result["startTime"]
                 del result["screenText"]
@@ -272,7 +355,10 @@ class DocProcAiService:
                 del result["page"]
                 del result["text"]
 
-        return query_result
+        return [{
+            "score": result["score"],
+            "mediaRecordSegment": result,
+        } for result in query_result]
 
     class BackgroundTaskItem:
         def __init__(self, task: Callable[[], Awaitable[None]], priority: int):
