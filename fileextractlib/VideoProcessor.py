@@ -26,8 +26,13 @@ class VideoProcessor:
             self.screen_text: str = screen_text
             self.embedding: Tensor = embedding
 
-    def __init__(self, screen_text_similarity_threshold: float = 0.8):
+    """
+    Initializes a new VideoProcessor with the given screen text similarity threshold (range 0.0 to 1.0) and 
+    minimum section length in seconds.
+    """
+    def __init__(self, screen_text_similarity_threshold: float = 0.8, minimum_section_length: int = 15):
         self.screen_text_similarity_threshold: float = screen_text_similarity_threshold
+        self.minimum_section_length: int = minimum_section_length
 
     """
     Generates sections of the video with the given file URL. Extracts spoken text and on-screen text of each section.
@@ -95,9 +100,11 @@ class VideoProcessor:
                 # otherwise we check if the screen text is similar to the previous screen text
                 similarity = Levenshtein.ratio(current_section.screen_text, screen_text)
 
-                if similarity > self.screen_text_similarity_threshold:
-                    # if the screen text is similar, we append the current caption to the current section
-                    # Captions always have a leading "- ", so we remove it
+                if (similarity >= self.screen_text_similarity_threshold
+                        or current_section.start_time + self.minimum_section_length
+                        > vtt.captions[image_index].start_in_seconds):
+                    # if the screen text is similar, or minimum section length hasn't been reached yet, we append the
+                    # current caption to the current section. Captions always have a leading "- ", so we remove it
                     current_section.transcript += " " + vtt.captions[image_index].text[2:]
                 else:
                     # if the screen text is not similar, we create a new section
