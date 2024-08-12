@@ -13,6 +13,7 @@ from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingG
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
 import logging
 import Levenshtein
+from fileextractlib.VideoProcessor import VideoProcessor
 
 _logger = logging.getLogger(__name__)
 
@@ -30,12 +31,13 @@ class DocProcAiService:
         self._db_conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         register_vector(self._db_conn)
 
-        # db_conn.execute("DROP TABLE IF EXISTS documents")
-        # db_conn.execute("DROP TABLE IF EXISTS videos")
+        # db_conn.execute("DROP TABLE IF EXISTS document_sections")
+        # db_conn.execute("DROP TABLE IF EXISTS video_sections")
 
         # ensure database tables exist
+        # table which contains the sections of all documents including their text, page number, and text embedding
         self._db_conn.execute("""
-                              CREATE TABLE IF NOT EXISTS documents (
+                              CREATE TABLE IF NOT EXISTS document_sections (
                                 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
                                 text text,
                                 media_record uuid,
@@ -43,8 +45,9 @@ class DocProcAiService:
                                 embedding vector(1024)
                               );
                               """)
+        # table which contains the sections of all videos including their screen text, transcript, start time, and text
         self._db_conn.execute("""
-                              CREATE TABLE IF NOT EXISTS videos (
+                              CREATE TABLE IF NOT EXISTS video_sections (
                                 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
                                 screen_text text,
                                 transcript text,
@@ -53,6 +56,15 @@ class DocProcAiService:
                                 embedding vector(1024)
                               );
                               """)
+        # table which contains the caption of full videos in WebVTT format. Primary key is the uuid of the media record
+        # the row stores captions for, and the vtt column stores the WebVTT formatted captions
+        self._db_conn.execute("""
+                              CREATE TABLE IF NOT EXISTS video_captions (
+                                media_record_id uuid PRIMARY KEY,
+                                vtt text
+                              );
+                              """)
+        # table which contains links between segments of different media records
         self._db_conn.execute("""
                               CREATE TABLE IF NOT EXISTS media_record_links (
                                 content_id uuid,
@@ -99,15 +111,34 @@ class DocProcAiService:
                 embedding_results = self._lecture_pdf_embedding_generator.generate_embedding(download_url)
                 for embedding_result in embedding_results:
                     self._db_conn.execute(
-                        query="INSERT INTO documents (text, media_record, page, embedding) VALUES (%s, %s, %s, %s)",
+                        query="""
+                              INSERT INTO document_sections (text, media_record, page, embedding) 
+                              VALUES (%s, %s, %s, %s)
+                              """,
                         params=(embedding_result.text, media_record_id, embedding_result.page_number,
                                 embedding_result.embedding))
             elif record_type == "VIDEO":
-                embedding_results = self._lecture_video_embedding_generator.generate_embeddings(download_url)
-                for embedding_result in embedding_results:
+                # TODO: make this configurable
+                video_processor = VideoProcessor(screen_text_similarity_threshold=0.8, minimum_section_length=15)
+                video_data = video_processor.process(download_url)
+                del video_processor
+
+                # store the captions of the video
+                self._db_conn.execute(
+                    query="""
+                          INSERT INTO video_captions (media_record_id, vtt)
+                          VALUES (%s, %s)
+                          """,
+                    params=(media_record_id, video_data.vtt.content))
+
+                # generate and store text embeddings for the sections of the video
+                self._lecture_video_embedding_generator.generate_embeddings(video_data.sections)
+                for embedding_result in video_data.sections:
                     self._db_conn.execute(
-                        query="INSERT INTO videos (screen_text, transcript, media_record, start_time, embedding) "
-                              + "VALUES (%s, %s, %s, %s, %s)",
+                        query="""
+                              INSERT INTO video_sections (screen_text, transcript, media_record, start_time, embedding)
+                              VALUES (%s, %s, %s, %s, %s)
+                              """,
                         params=(embedding_result.screen_text, embedding_result.transcript, media_record_id,
                                 embedding_result.start_time, embedding_result.embedding))
             else:
@@ -129,7 +160,7 @@ class DocProcAiService:
                     page,
                     NULL::integer AS "startTime",
                     text AS "text"
-                FROM documents
+                FROM document_sections
                 WHERE media_record = ANY(%(mediaRecordIds)s)
             ),
             video_results AS (
@@ -140,7 +171,7 @@ class DocProcAiService:
                     NULL::integer AS page,
                     start_time AS "startTime",
                     screen_text AS "text"
-                FROM videos
+                FROM video_sections
                 WHERE media_record = ANY(%(mediaRecordIds)s)
             ),
             results AS (
@@ -163,8 +194,6 @@ class DocProcAiService:
                 if media_record_id not in media_records_segments:
                     media_records_segments[media_record_id] = []
                 media_records_segments[media_record_id].append(result)
-
-            print(media_records_segments.keys())
 
             # now we can check for links
             # go through each media record's segments
@@ -197,6 +226,7 @@ class DocProcAiService:
         # before being linked
         priority = 1
         generate_content_media_record_links_task()
+        # TODO: this should be executed as a task, probably
         #self._background_task_queue.put(
         #    DocProcAiService.BackgroundTaskItem(generate_content_media_record_links_task, priority))
 
@@ -229,9 +259,9 @@ class DocProcAiService:
                               })
 
         # delete media record segments
-        self._db_conn.execute("DELETE FROM documents WHERE media_record = %s",
+        self._db_conn.execute("DELETE FROM document_sections WHERE media_record = %s",
                               (media_record_id,))
-        self._db_conn.execute("DELETE FROM videos WHERE media_record = %s",
+        self._db_conn.execute("DELETE FROM video_sections WHERE media_record = %s",
                               (media_record_id,))
 
     def get_media_record_links_for_content(self, content_id: uuid.UUID):
@@ -258,7 +288,7 @@ class DocProcAiService:
                     text,
                     NULL::text AS "screenText",
                     NULL::text AS transcript
-                FROM documents
+                FROM document_sections
                 WHERE id = ANY(%(segmentIds)s)
             ),
             video_results AS (
@@ -271,7 +301,7 @@ class DocProcAiService:
                     NULL::text AS text,
                     screen_text AS "screenText",
                     transcript
-                FROM videos
+                FROM video_sections
                 WHERE id = ANY(%(segmentIds)s)
             ),
             results AS (
@@ -296,6 +326,60 @@ class DocProcAiService:
                     "segment2": next(x for x in result_segments if x["id"] == segment_link["segment2Id"])
                 } for segment_link in result]
 
+    def get_media_record_segments(self, media_record_id: uuid.UUID):
+        query = """
+            WITH document_results AS (
+                SELECT
+                    id,
+                    media_record AS "mediaRecordId",
+                    'document' AS source,
+                    page,
+                    NULL::integer AS "startTime",
+                    text,
+                    NULL::text AS "screenText",
+                    NULL::text AS transcript
+                FROM document_sections
+                WHERE media_record = %(id)s
+            ),
+            video_results AS (
+                SELECT 
+                    id,
+                    media_record AS "mediaRecordId",
+                    'video' AS source,
+                    NULL::integer AS page,
+                    start_time AS "startTime",
+                    NULL::text AS text,
+                    screen_text AS "screenText",
+                    transcript
+                FROM video_sections
+                WHERE media_record = %(id)s
+            ),
+            results AS (
+                SELECT * FROM document_results
+                UNION ALL
+                SELECT * FROM video_results
+            )
+            SELECT * FROM results
+            """
+
+        results = self._db_conn.execute(query, {"id": media_record_id}).fetchall()
+
+        for result in results:
+            if result["source"] == "document":
+                del result["startTime"]
+                del result["screenText"]
+                del result["transcript"]
+            elif result["source"] == "video":
+                del result["page"]
+                del result["text"]
+
+        return results
+
+    def get_media_record_captions(self, media_record_id: uuid.UUID) -> str:
+        result = self._db_conn.execute("SELECT vtt FROM video_captions WHERE media_record_id = %s",
+                                       (media_record_id,)).fetchone()
+        return result["vtt"]
+
     def semantic_search(self,
                         query_text: str,
                         count: int,
@@ -315,7 +399,7 @@ class DocProcAiService:
                     NULL::text AS "screenText",
                     NULL::text AS transcript,
                     embedding <=> %(query_embedding)s AS score
-                FROM documents
+                FROM document_sections
                 WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
             ),
             video_results AS (
@@ -328,7 +412,7 @@ class DocProcAiService:
                     screen_text AS "screenText",
                     transcript,
                     embedding <=> %(query_embedding)s AS score
-                FROM videos
+                FROM video_sections
                 WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
             ),
             results AS (
