@@ -42,6 +42,14 @@ class GraphQLController:
         def get_media_record_links_for_content(parent, info, contentId: uuid.UUID):
             return ai_service.get_media_record_links_for_content(contentId)
 
+        @query.field("_internal_noauth_getMediaRecordSegments")
+        def get_media_record_segments(parent, info, mediaRecordId: uuid.UUID):
+            return ai_service.get_media_record_segments(mediaRecordId)
+
+        @query.field("_internal_noauth_getMediaRecordCaptions")
+        def get_media_record_captions(parent, info, mediaRecordId: uuid.UUID):
+            return ai_service.get_media_record_captions(mediaRecordId)
+
         @media_record_segment_interface.type_resolver
         def resolve_semantic_search_result_type(obj, *_):
             if obj["source"] == "document":

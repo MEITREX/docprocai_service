@@ -26,6 +26,14 @@ class VideoProcessor:
             self.screen_text: str = screen_text
             self.embedding: Tensor = embedding
 
+    class VideoData:
+        """
+        Represents a video's data, containing the captions and the sections of the video.
+        """
+        def __init__(self, vtt: WebVTT, sections: list["VideoProcessor.Section"]):
+            self.vtt: WebVTT = vtt
+            self.sections: list[VideoProcessor.Section] = sections
+
     """
     Initializes a new VideoProcessor with the given screen text similarity threshold (range 0.0 to 1.0) and 
     minimum section length in seconds.
@@ -37,7 +45,7 @@ class VideoProcessor:
     """
     Generates sections of the video with the given file URL. Extracts spoken text and on-screen text of each section.
     """
-    def generate_sections(self, file_url: str) -> list[Section]:
+    def process(self, file_url: str) -> VideoData:
         transcript_generator: TranscriptGenerator = TranscriptGenerator()
         vtt: WebVTT = transcript_generator.process_to_vtt(file_url)
 
@@ -116,4 +124,6 @@ class VideoProcessor:
                         screen_text=screen_text,
                         embedding=None)
 
-        return sections
+        video_data = VideoProcessor.VideoData(vtt, sections)
+
+        return video_data
