@@ -1,5 +1,26 @@
 type Mutation {
+    """
+    Manually add a media record to the ingest queue to process it. This mutation returns instantly when the media
+    record was added to the ingest queue. The processing is done asynchronously.
+
+    ⚠️ This mutation is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
     _internal_noauth_ingestMediaRecord(input: IngestMediaRecordInput!): UUID
+
+    """
+    Manually enqueues a task to link pages/timestamps of the media records which are part of a content. This mutation
+    returns instantly when the content was added to the ingest queue. The processing is done asynchronously.
+
+    ⚠️ This mutation is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_enqueueGenerateMediaRecordLinksForContent(input: GenerateMediaRecordLinksInput!): UUID
+}
+
+input GenerateMediaRecordLinksInput {
+    contentId: UUID!
+    mediaRecordIds: [UUID!]!
 }
 
 input IngestMediaRecordInput {

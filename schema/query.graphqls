@@ -3,24 +3,39 @@ type Query {
         count: Int = 10,
         mediaRecordBlacklist: [UUID!]! = [],
         mediaRecordWhitelist: [UUID!]! = []) : [SemanticSearchResult!]!
+
+    _internal_noauth_getMediaRecordLinksForContent(contentId: UUID!): [MediaRecordSegmentLink!]!
 }
 
-interface SemanticSearchResult {
+type MediaRecordSegmentLink {
+    segment1: MediaRecordSegment!
+    segment2: MediaRecordSegment!
+}
+
+type SemanticSearchResult {
     """
     The similarity score of the search result.
     """
     score: Float!
+    mediaRecordSegment: MediaRecordSegment!
+}
+
+interface MediaRecordSegment {
     """
-    UUID of the media record this search result references.
+    UUID of this segment.
+    """
+    id: UUID!
+    """
+    UUID of the media record this segment is part of.
     """
     mediaRecordId: UUID!
 }
 
-type SemanticSearchDocumentResult implements SemanticSearchResult {
+type DocumentRecordSegment implements MediaRecordSegment {
     """
-    The similarity score of the search result.
+    UUID of this segment.
     """
-    score: Float!
+    id: UUID!
     """
     UUID of the media record this search result references.
     """
@@ -35,11 +50,11 @@ type SemanticSearchDocumentResult implements SemanticSearchResult {
     text: String!
 }
 
-type SemanticSearchVideoResult implements SemanticSearchResult {
+type VideoRecordSegment implements MediaRecordSegment {
     """
-    The similarity score of the search result.
+    UUID of this segment.
     """
-    score: Float!
+    id: UUID!
     """
     UUID of the media record this search result references.
     """
