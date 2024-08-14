@@ -120,7 +120,7 @@ class VideoProcessor:
                     sections.append(current_section)
                     current_section = VideoProcessor.Section(
                         start_time=vtt.captions[image_index].start_in_seconds,
-                        transcript=vtt.captions[image_index].text[2:0],
+                        transcript=vtt.captions[image_index].text[2:],
                         screen_text=screen_text,
                         embedding=None)
 
