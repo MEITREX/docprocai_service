@@ -6,6 +6,7 @@ import PIL
 import io
 from torch import Tensor
 import Levenshtein
+import sys
 
 
 class VideoProcessor:
@@ -55,7 +56,14 @@ class VideoProcessor:
         select_filters: list[str] = []
         for caption in vtt.captions:
             start_time_seconds: int = caption.start_in_seconds
-            select_filters.append(f"eq(t,{start_time_seconds})")
+
+            # ffmpeg's select filter requires a start time greater than 0
+            if start_time_seconds == 0:
+                start_time_seconds = 1
+
+            select_filters.append(f"lt(prev_pts*TB,{start_time_seconds})*gte(pts*TB,{start_time_seconds})")
+
+        print("+".join(select_filters))
 
         out, err = (stream
                     .filter_("select", "+".join(select_filters))
