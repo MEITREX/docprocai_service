@@ -20,3 +20,4 @@ ariadne
 gql[all]
 dapr
 dapr-ext-fastapi
+opencv-python

@@ -119,7 +119,7 @@ class DocProcAiService:
                                 embedding_result.embedding))
             elif record_type == "VIDEO":
                 # TODO: make this configurable
-                video_processor = VideoProcessor(screen_text_similarity_threshold=0.8, minimum_section_length=15)
+                video_processor = VideoProcessor(section_image_similarity_threshold=0.8, minimum_section_length=15)
                 video_data = video_processor.process(download_url)
                 del video_processor
 
