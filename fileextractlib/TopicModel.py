@@ -14,7 +14,7 @@ docs = []
 
 def createTopicModel():
     vectorizer_model = CountVectorizer(stop_words="english", ngram_range=(1, 3))
-    ctfidf_model = ClassTfidfTransformer()
+    ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True, bm25_weighting=True)
 
     topic_model = BERTopic(
         vectorizer_model=vectorizer_model,
@@ -22,7 +22,16 @@ def createTopicModel():
     )
     topics = topic_model.fit_transform(docs)
     print(topic_model.get_topic_info())
-    print(topic_model.get_topic(1, full=True))
+    print(topic_model.get_topic(0, full=True))
+
+    fig = topic_model.visualize_topics()
+    fig.write_html("topicmodel.html")
+
+    fig2 = topic_model.visualize_barchart(top_n_topics=50, n_words=100)
+    fig2.write_html("barchart.html")
+
+    fig3 = topic_model.visualize_documents(docs)
+    fig3.write_html("docs.html")
 
     return topics
 
