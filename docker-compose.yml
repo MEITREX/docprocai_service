@@ -21,6 +21,21 @@ services:
     ports:
       - "9900:9900"
       - "9901:9901"
+  dapr-docprocai:
+    image: "daprio/daprd"
+    command: [
+      "./daprd",
+      "--app-id", "docprocai_service",
+      "--app-port", "9901",
+      "--dapr-http-port", "9900",
+      "--resources-path", "./components"
+    ]
+    volumes:
+      - "./../docprocai_service/components/:/components" # Mount our components folder for the runtime to use. The mounted location must match the --resources-path argument.
+    depends_on:
+      - app-media
+      - redis
+    network_mode: "service:app-docprocai"
 volumes:
   searchdata:
 networks:

@@ -18,3 +18,5 @@ uvicorn
 pgvector
 ariadne
 gql[all]
+dapr
+dapr-ext-fastapi

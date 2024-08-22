@@ -1,26 +1,70 @@
 type Query {
+    """
+    Performs a semantic search with the specified search query, finding segments of media records which are most
+    relevant.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
     _internal_noauth_semanticSearch(queryText: String!,
         count: Int = 10,
         mediaRecordBlacklist: [UUID!]! = [],
         mediaRecordWhitelist: [UUID!]! = []) : [SemanticSearchResult!]!
+
+    """
+    Gets all links between segments of media records of the specified content.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getMediaRecordLinksForContent(contentId: UUID!): [MediaRecordSegmentLink!]!
+
+    """
+    Gets the document segments of the specified media record.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getMediaRecordSegments(mediaRecordId: UUID!): [MediaRecordSegment!]!
+
+    """
+    Gets the closed captions of the specified media record if there are any, otherwise returns null.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getMediaRecordCaptions(mediaRecordId: UUID!): String
 }
 
-interface SemanticSearchResult {
+type MediaRecordSegmentLink {
+    segment1: MediaRecordSegment!
+    segment2: MediaRecordSegment!
+}
+
+type SemanticSearchResult {
     """
     The similarity score of the search result.
     """
     score: Float!
+    mediaRecordSegment: MediaRecordSegment!
+}
+
+interface MediaRecordSegment {
     """
-    UUID of the media record this search result references.
+    UUID of this segment.
+    """
+    id: UUID!
+    """
+    UUID of the media record this segment is part of.
     """
     mediaRecordId: UUID!
 }
 
-type SemanticSearchDocumentResult implements SemanticSearchResult {
+type DocumentRecordSegment implements MediaRecordSegment {
     """
-    The similarity score of the search result.
+    UUID of this segment.
     """
-    score: Float!
+    id: UUID!
     """
     UUID of the media record this search result references.
     """
@@ -35,11 +79,11 @@ type SemanticSearchDocumentResult implements SemanticSearchResult {
     text: String!
 }
 
-type SemanticSearchVideoResult implements SemanticSearchResult {
+type VideoRecordSegment implements MediaRecordSegment {
     """
-    The similarity score of the search result.
+    UUID of this segment.
     """
-    score: Float!
+    id: UUID!
     """
     UUID of the media record this search result references.
     """

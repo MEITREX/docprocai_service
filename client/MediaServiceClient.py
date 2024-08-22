@@ -21,6 +21,6 @@ class MediaServiceClient:
             }
             """
         )
-        variables = {"recordId": document_id}
+        variables = {"recordId": str(document_id)}
         result = await self._client.execute_async(query, variable_values=variables)
         return result["_internal_noauth_mediaRecordsByIds"][0]
