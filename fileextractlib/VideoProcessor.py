@@ -43,7 +43,7 @@ class VideoProcessor:
     Initializes a new VideoProcessor with the given screen text similarity threshold (range 0.0 to 1.0) and 
     minimum section length in seconds.
     """
-    def __init__(self, section_image_similarity_threshold: float = 0.8, minimum_section_length: int = 15):
+    def __init__(self, section_image_similarity_threshold: float = 0.9, minimum_section_length: int = 15):
         self.section_image_similarity_threshold: float = section_image_similarity_threshold
         self.minimum_section_length: int = minimum_section_length
 
@@ -66,8 +66,6 @@ class VideoProcessor:
                 start_time_seconds = 1
 
             select_filters.append(f"lt(prev_pts*TB,{start_time_seconds})*gte(pts*TB,{start_time_seconds})")
-
-        print("+".join(select_filters))
 
         out, err = (stream
                     .filter_("select", "+".join(select_filters))
@@ -102,10 +100,16 @@ class VideoProcessor:
         # create a new section, merging the captions within the timespan of that section
         sections: list[VideoProcessor.Section] = []
         current_section: Optional[VideoProcessor.Section] = None
+        current_section_cropped_image: Optional[PIL.Image.Image] = None
         current_section_image: Optional[PIL.Image.Image] = None
         for bmp_file in bmp_files:
             image = PIL.Image.open(io.BytesIO(bmp_file[0]))
             image_index: int = bmp_file[1]
+
+            # we crop the image to its center portion because in some videos the
+            # lecturer might put other things, e.g. a webcam feed, in the corners
+            cropped_image = image.crop((image.width * 1/6, image.height * 1/10, 
+                                        image.width * 5/6, image.height * 9/10))
 
             if current_section is None:
                 # if this is the first image, we need to create a new section
@@ -116,27 +120,34 @@ class VideoProcessor:
                     screen_text=None,
                     embedding=None)
                 current_section_image = image
+                current_section_cropped_image = cropped_image
             else:
-                # otherwise we check if the screen is similar using template matching
-                matcher = ImageTemplateMatcher(template=current_section_image)
+                # otherwise we check if the screen is similar to the current sections screen 
+                # image using template matching
+                matcher = ImageTemplateMatcher(template=current_section_cropped_image)
 
-                if (matcher.match(image) >= self.section_image_similarity_threshold
+                similarity = matcher.match(cropped_image)
+
+                if (similarity >= self.section_image_similarity_threshold
                         or current_section.start_time + self.minimum_section_length
                         > vtt.captions[image_index].start_in_seconds):
-                    # if the screen text is similar, or minimum section length hasn't been reached yet, we append the
-                    # current caption to the current section. Captions always have a leading "- ", so we remove it
+                    # if the screen is more similar than the threshold, or minimum section length 
+                    # hasn't been reached yet, we append the current caption to the current section. 
+                    # Captions always have a leading "- ", so we remove it
                     current_section.transcript += " " + vtt.captions[image_index].text[2:]
                 else:
-                    # if the screen text is not similar, we create a new section
+                    # if the screen is not similar, we create a new section
                     # Caption texts always have a leading "- ", so we remove it
-                    current_section.screen_text = pytesseract.image_to_string(image)
+                    current_section.screen_text = pytesseract.image_to_string(current_section_image)
                     sections.append(current_section)
+
                     current_section = VideoProcessor.Section(
                         start_time=vtt.captions[image_index].start_in_seconds,
                         transcript=vtt.captions[image_index].text[2:],
                         screen_text=None,
                         embedding=None)
                     current_section_image = image
+                    current_section_cropped_image = cropped_image
 
         video_data = VideoProcessor.VideoData(vtt, sections)
 
