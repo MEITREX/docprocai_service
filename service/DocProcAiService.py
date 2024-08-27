@@ -1,5 +1,6 @@
 import asyncio
 
+import PIL.Image
 from pgvector.psycopg import register_vector
 import psycopg
 import fileextractlib.LlamaRunner as LlamaRunner
@@ -8,12 +9,14 @@ import queue
 from typing import Callable, Self, Awaitable
 import uuid
 import client.MediaServiceClient as MediaServiceClient
-from fileextractlib.LecturePdfEmbeddingGenerator import LecturePdfEmbeddingGenerator
+from fileextractlib.DocumentProcessor import DocumentProcessor
+from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
 import logging
-import Levenshtein
 from fileextractlib.VideoProcessor import VideoProcessor
+from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
+import io
 
 _logger = logging.getLogger(__name__)
 
@@ -42,6 +45,7 @@ class DocProcAiService:
                                 text text,
                                 media_record uuid,
                                 page int,
+                                thumbnail bytea,
                                 embedding vector(1024)
                               );
                               """)
@@ -53,6 +57,7 @@ class DocProcAiService:
                                 transcript text,
                                 media_record uuid,
                                 start_time int,
+                                thumbnail bytea,
                                 embedding vector(1024)
                               );
                               """)
@@ -81,7 +86,7 @@ class DocProcAiService:
 
         self._sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
 
-        self._lecture_pdf_embedding_generator: LecturePdfEmbeddingGenerator = LecturePdfEmbeddingGenerator()
+        self._lecture_pdf_embedding_generator: LectureDocumentEmbeddingGenerator = LectureDocumentEmbeddingGenerator()
         self._lecture_video_embedding_generator: LectureVideoEmbeddingGenerator = LectureVideoEmbeddingGenerator()
 
         self._background_task_queue: queue.PriorityQueue[DocProcAiService.BackgroundTaskItem] = queue.PriorityQueue()
@@ -96,7 +101,9 @@ class DocProcAiService:
 
     def __del__(self):
         self._keep_background_task_thread_alive = False
-        self._db_conn.close()
+
+        if self._db_conn is not None:
+            self._db_conn.close()
 
     def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
         async def ingest_media_record_task():
@@ -108,18 +115,22 @@ class DocProcAiService:
             _logger.info("Ingesting media record with download URL: " + download_url)
 
             if record_type == "PRESENTATION" or record_type == "DOCUMENT":
-                embedding_results = self._lecture_pdf_embedding_generator.generate_embedding(download_url)
-                for embedding_result in embedding_results:
+                document_processor = DocumentProcessor()
+                document_data = document_processor.process(download_url)
+                self._lecture_pdf_embedding_generator.generate_embeddings(document_data.pages)
+                for section in document_data.pages:
+                    thumbnail_bytes = io.BytesIO()
+                    section.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
                     self._db_conn.execute(
                         query="""
-                              INSERT INTO document_sections (text, media_record, page, embedding) 
-                              VALUES (%s, %s, %s, %s)
+                              INSERT INTO document_sections (text, media_record, page, thumbnail, embedding) 
+                              VALUES (%s, %s, %s, %s, %s)
                               """,
-                        params=(embedding_result.text, media_record_id, embedding_result.page_number,
-                                embedding_result.embedding))
+                        params=(section.text, media_record_id, section.page_number,
+                                thumbnail_bytes.getvalue(), section.embedding))
             elif record_type == "VIDEO":
                 # TODO: make this configurable
-                video_processor = VideoProcessor(screen_text_similarity_threshold=0.8, minimum_section_length=15)
+                video_processor = VideoProcessor(section_image_similarity_threshold=0.9, minimum_section_length=15)
                 video_data = video_processor.process(download_url)
                 del video_processor
 
@@ -133,14 +144,23 @@ class DocProcAiService:
 
                 # generate and store text embeddings for the sections of the video
                 self._lecture_video_embedding_generator.generate_embeddings(video_data.sections)
-                for embedding_result in video_data.sections:
+                for section in video_data.sections:
+                    thumbnail_bytes = io.BytesIO()
+                    section.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
                     self._db_conn.execute(
                         query="""
-                              INSERT INTO video_sections (screen_text, transcript, media_record, start_time, embedding)
-                              VALUES (%s, %s, %s, %s, %s)
+                              INSERT INTO video_sections (
+                                screen_text,
+                                transcript,
+                                media_record,
+                                start_time,
+                                thumbnail,
+                                embedding
+                              )
+                              VALUES (%s, %s, %s, %s, %s, %s)
                               """,
-                        params=(embedding_result.screen_text, embedding_result.transcript, media_record_id,
-                                embedding_result.start_time, embedding_result.embedding))
+                        params=(section.screen_text, section.transcript, media_record_id,
+                                section.start_time, thumbnail_bytes.getvalue(), section.embedding))
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
@@ -151,6 +171,7 @@ class DocProcAiService:
 
     def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID, media_record_ids: list[uuid.UUID]):
         def generate_content_media_record_links_task():
+            _logger.debug("Generating content media record links for content " + str(content_id) + "...")
             query = """
             WITH document_results AS (
                 SELECT
@@ -159,7 +180,8 @@ class DocProcAiService:
                     'document' AS source,
                     page,
                     NULL::integer AS "startTime",
-                    text AS "text"
+                    text AS "text",
+                    thumbnail
                 FROM document_sections
                 WHERE media_record = ANY(%(mediaRecordIds)s)
             ),
@@ -170,7 +192,8 @@ class DocProcAiService:
                     'video' AS source,
                     NULL::integer AS page,
                     start_time AS "startTime",
-                    screen_text AS "text"
+                    screen_text AS "text",
+                    thumbnail
                 FROM video_sections
                 WHERE media_record = ANY(%(mediaRecordIds)s)
             ),
@@ -197,29 +220,57 @@ class DocProcAiService:
 
             # now we can check for links
             # go through each media record's segments
-            for media_record_id, segments in media_records_segments.items():
+            for media_record_id, segments in reversed(media_records_segments.items()):
                 for segment in segments:
                     # get the text of the segment
-                    segment_text = segment["text"]
+                    segment_thumbnail = PIL.Image.open(io.BytesIO(segment["thumbnail"]))
+
+                    # TODO: Only crop if video
+                    cropped_segment_thumbnail = segment_thumbnail.crop((
+                        segment_thumbnail.width * 1/6, segment_thumbnail.height * 1/10,
+                        segment_thumbnail.width * 5/6, segment_thumbnail.height * 9/10))
+
+                    image_template_matcher = ImageTemplateMatcher(
+                        template=cropped_segment_thumbnail,
+                        scaling_factor=0.4,
+                        enable_multi_scale_matching=True,
+                        multi_scale_matching_steps=40
+                    )
+
                     # go through each other media record's segments
                     for other_media_record_id, other_segments in media_records_segments.items():
                         # skip if the other media record is the same as the current one
                         if other_media_record_id == media_record_id:
                             continue
 
+                        # find the segment with the highest similarity
+                        max_similarity = 0
+                        max_similarity_segment_id = None
                         for other_segment in other_segments:
-                            # skip if a link between these segments already exists
-                            if self.does_link_between_media_record_segments_exist(segment["id"], other_segment["id"]):
-                                continue
+                            # resize the other segment's thumbnail, so it's the same size as the template thumbnail
+                            other_segment_thumbnail = PIL.Image.open(io.BytesIO(other_segment["thumbnail"]))
+                            size_ratio = segment_thumbnail.height / other_segment_thumbnail.height
+                            other_segment_thumbnail = other_segment_thumbnail.resize(
+                                (int(other_segment_thumbnail.width * size_ratio), segment_thumbnail.height))
 
-                            other_segment_text = other_segment["text"]
-                            # calculate the levenshtein distance between the two texts
-                            levenshtein_ratio = Levenshtein.ratio(segment_text, other_segment_text)
-                            # if the ratio is larger than 0.9, we can assume that the two segments are similar
-                            # TODO: Make this configurable
-                            if levenshtein_ratio > 0.9:
-                                # create a link between the two segments
-                                self.create_link_between_media_record_segments(content_id, segment["id"], other_segment["id"])
+                            # use the image template matcher to try to match the thumbnails
+                            # TODO: Only use center portion of image for matching
+                            similarity = image_template_matcher.match(other_segment_thumbnail)
+                            if similarity > max_similarity:
+                                max_similarity = similarity
+                                max_similarity_segment_id = other_segment["id"]
+
+                        # TODO: Make this configurable
+                        if max_similarity > 0.75:
+                            # create a link between the two segments
+                            # skip if a link between these segments already exists
+                            if not self.does_link_between_media_record_segments_exist(segment["id"],
+                                                                                      max_similarity_segment_id):
+                                self.create_link_between_media_record_segments(content_id,
+                                                                               segment["id"],
+                                                                               max_similarity_segment_id)
+
+            _logger.debug("Generated content media record links for content " + str(content_id) + ".")
 
         # priority of media record link generation needs to be higher than that of media record ingestion (higher
         # priority items are processed last), so that the media records which are being linked have been processed

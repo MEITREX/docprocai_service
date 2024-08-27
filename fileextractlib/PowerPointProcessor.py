@@ -1,34 +1,37 @@
-import argparse
-import json
-from typing import Any
-
-from pptx import Presentation
+from fileextractlib.DocumentData import DocumentData
+import os
+import typing
+import tempfile
+import subprocess
+from fileextractlib.PdfProcessor import PdfProcessor
 
 
 class PowerPointProcessor:
+    def __init__(self):
+        self.pdf_processor = PdfProcessor()
 
-    def extract_text_from_pptx(self, filename: str) -> dict[Any, Any]:
-        prs = Presentation(filename)
-        text_runs = {}
+    def process_from_io(self, file: typing.BinaryIO) -> DocumentData:
+        # convert the pptx to a pdf using libreoffice. We need to do it in this roundabout way because there is
+        # no library to render pptx to images, and we need images for the thumbnails
 
-        for page, slide in enumerate(prs.slides):
-            text = ""
-            for shape in slide.shapes:
-                if shape.has_text_frame and shape.text.strip():
-                    text += shape.text
+        # firstly, we need to create a temp directory to save the file to. This is necessary because libreoffice
+        # cannot output a converted file to stdout AND it also cannot output a file to a specific file name, so we
+        # need to create a whole directory to make sure no naming conflicts arise
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # save the bytes of the pptx to the temp dir
+            in_file_path = os.path.join(temp_dir, "file.pptx")
+            with open(in_file_path, "wb") as f:
+                f.write(file.read())
 
-                    text_runs[page + 1] = text
+            # convert the pptx to pdf
+            subprocess.run([
+                "soffice",
+                "--headless",
+                "--convert-to", "pdf:impress_pdf_Export",
+                "--outdir", str(os.path.abspath(temp_dir)),
+                str(os.path.abspath(in_file_path))
+            ])
 
-        with open("test.json", "w", encoding="utf8") as file:
-            json.dump(text_runs, file, indent=2, ensure_ascii=False)
-
-        return text_runs
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--file")
-args = parser.parse_args()
-file_path = 'path_to_your_pptx_file.pptx'
-processor = PowerPointProcessor()
-text_content = processor.extract_text_from_pptx(args.file)
-print(text_content)
+            # use pdf processor to process the pptx in the same way we'd process a pdf
+            with open(os.path.join(temp_dir, "file.pdf"), "rb") as pdf_file:
+                return self.pdf_processor.process_from_io(pdf_file)
