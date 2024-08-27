@@ -4,7 +4,9 @@ FROM python:3.12
 WORKDIR /app
 
 RUN apt update -y
-RUN apt install -y poppler-utils tesseract-ocr ffmpeg
+# poppler for pdf2image, tesseract for OCR, ffmpeg for video processing, libreoffice impress for pptx to pdf conversion
+# the jre for tika
+RUN apt install -y poppler-utils tesseract-ocr ffmpeg libreoffice-impress default-jre
 
 # only copy the requirements.txt file to the container for now, so that the dependencies can be installed and this
 # step can be cached by docker so dependencies don't need to be reinstalled every time the code changes

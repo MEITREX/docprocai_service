@@ -3,18 +3,10 @@ import sys
 import time
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
 from fileextractlib.VideoProcessor import VideoProcessor
-from torch import Tensor
-
+from fileextractlib.VideoData import VideoSectionData
 
 class LectureVideoEmbeddingGenerator:
-    class Section:
-        def __init__(self, start_time: int, transcript: str, screen_text: str, embedding: Tensor):
-            self.start_time: int = start_time
-            self.transcript: str = transcript
-            self.screen_text: str = screen_text
-            self.embedding: Tensor = embedding
-
-    def generate_embeddings(self, sections: list[Section]):
+    def generate_embeddings(self, sections: list[VideoSectionData]):
         sentence_embedding_runner = SentenceEmbeddingRunner()
 
         for section in sections:

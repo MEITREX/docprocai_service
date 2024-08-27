@@ -8,9 +8,7 @@ import ffmpeg
 import pytesseract
 import PIL.Image
 import io
-from torch import Tensor
-import Levenshtein
-import sys
+from fileextractlib.VideoData import VideoData, VideoSectionData
 
 
 class VideoProcessor:
@@ -19,25 +17,6 @@ class VideoProcessor:
     screen text. The screen text is then compared to the transcript to create sections of the video. Each section
     contains the transcript, screen text, and a text embedding of its contents.
     """
-
-    class Section:
-        """
-        Represents a section of a video, containing the start time of the section in seconds, the transcript of the
-        section, the screen text of the section, and a text embedding of the section's contents.
-        """
-        def __init__(self, start_time: int, transcript: str, screen_text: str, embedding: Tensor):
-            self.start_time: int = start_time
-            self.transcript: str = transcript
-            self.screen_text: str = screen_text
-            self.embedding: Tensor = embedding
-
-    class VideoData:
-        """
-        Represents a video's data, containing the captions and the sections of the video.
-        """
-        def __init__(self, vtt: WebVTT, sections: list["VideoProcessor.Section"]):
-            self.vtt: WebVTT = vtt
-            self.sections: list[VideoProcessor.Section] = sections
 
     """
     Initializes a new VideoProcessor with the given screen text similarity threshold (range 0.0 to 1.0) and 
@@ -98,8 +77,8 @@ class VideoProcessor:
         # of a sentence.
         # We extracted images at the start of each caption, now we will check when the video changes significantly and
         # create a new section, merging the captions within the timespan of that section
-        sections: list[VideoProcessor.Section] = []
-        current_section: Optional[VideoProcessor.Section] = None
+        sections: list[VideoSectionData] = []
+        current_section: Optional[VideoSectionData] = None
         current_section_cropped_image: Optional[PIL.Image.Image] = None
         current_section_image: Optional[PIL.Image.Image] = None
         for bmp_file in bmp_files:
@@ -114,10 +93,12 @@ class VideoProcessor:
             if current_section is None:
                 # if this is the first image, we need to create a new section
                 # captions always have a leading "- ", so we remove it
-                current_section = VideoProcessor.Section(
+                # Set the screen text, thumbnail, and embedding later when we have found the whole section
+                current_section = VideoSectionData(
                     start_time=vtt.captions[image_index].start_in_seconds,
                     transcript=vtt.captions[image_index].text[2:],
                     screen_text=None,
+                    thumbnail=None,
                     embedding=None)
                 current_section_image = image
                 current_section_cropped_image = cropped_image
@@ -139,16 +120,18 @@ class VideoProcessor:
                     # if the screen is not similar, we create a new section
                     # Caption texts always have a leading "- ", so we remove it
                     current_section.screen_text = pytesseract.image_to_string(current_section_image)
+                    current_section.thumbnail = current_section_image
                     sections.append(current_section)
 
-                    current_section = VideoProcessor.Section(
+                    current_section = VideoSectionData(
                         start_time=vtt.captions[image_index].start_in_seconds,
                         transcript=vtt.captions[image_index].text[2:],
                         screen_text=None,
+                        thumbnail=None,
                         embedding=None)
                     current_section_image = image
                     current_section_cropped_image = cropped_image
 
-        video_data = VideoProcessor.VideoData(vtt, sections)
+        video_data = VideoData(vtt, sections)
 
         return video_data
