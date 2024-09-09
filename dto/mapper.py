@@ -21,7 +21,7 @@ def document_segment_entity_to_dto(entity: DocumentSegmentEntity) -> DocumentRec
         "mediaRecordId": entity.media_record_id,
         "page": entity.page_index,
         "text": entity.text,
-        "thumbnail": base64.b64encode(entity.thumbnail).decode("utf-8"),
+        "thumbnail": "data:image/jpeg;base64," + base64.b64encode(entity.thumbnail).decode("utf-8"),
         "title": entity.title
     }
 
@@ -34,7 +34,7 @@ def video_segment_entity_to_dto(entity: VideoSegmentEntity) -> "VideoRecordSegme
         "startTime": entity.start_time,
         "screenText": entity.screen_text,
         "transcript": entity.transcript,
-        "thumbnail": base64.b64encode(entity.thumbnail).decode("utf-8"),
+        "thumbnail": "data:image/jpeg;base64," + base64.b64encode(entity.thumbnail).decode("utf-8"),
         "title": entity.title
     }
 
