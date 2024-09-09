@@ -70,30 +70,30 @@ class DocProcAiService:
                 document_processor = DocumentProcessor()
                 document_data = document_processor.process(download_url)
                 self._lecture_pdf_embedding_generator.generate_embeddings(document_data.pages)
-                for section in document_data.pages:
+                for segment in document_data.pages:
                     thumbnail_bytes = io.BytesIO()
-                    section.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
+                    segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
                     # TODO: Fill placeholder title
-                    self.database.insert_document_segment(section.text, media_record_id, section.page_number,
-                                                          thumbnail_bytes.getvalue(), "Placeholder Title", section.embedding)
+                    self.database.insert_document_segment(segment.text, media_record_id, segment.page_number,
+                                                          thumbnail_bytes.getvalue(), "Placeholder Title", segment.embedding)
             elif record_type == "VIDEO":
                 # TODO: make this configurable
-                video_processor = VideoProcessor(section_image_similarity_threshold=0.9, minimum_section_length=15)
+                video_processor = VideoProcessor(segment_image_similarity_threshold=0.9, minimum_segment_length=15)
                 video_data = video_processor.process(download_url)
                 del video_processor
 
                 # store the captions of the video
                 self.database.insert_video_captions(media_record_id, video_data.vtt.content)
 
-                # generate and store text embeddings for the sections of the video
-                self._lecture_video_embedding_generator.generate_embeddings(video_data.sections)
-                for section in video_data.sections:
+                # generate and store text embeddings for the segments of the video
+                self._lecture_video_embedding_generator.generate_embeddings(video_data.segments)
+                for segment in video_data.segments:
                     thumbnail_bytes = io.BytesIO()
-                    section.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
+                    segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
                     # TODO: Fill placeholder title
-                    self.database.insert_video_segment(section.screen_text, section.transcript, media_record_id,
-                                                       section.start_time, thumbnail_bytes.getvalue(),
-                                                       "Placeholder Title", section.embedding)
+                    self.database.insert_video_segment(segment.screen_text, segment.transcript, media_record_id,
+                                                       segment.start_time, thumbnail_bytes.getvalue(),
+                                                       "Placeholder Title", segment.embedding)
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 

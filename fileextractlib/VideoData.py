@@ -3,9 +3,9 @@ from torch import Tensor
 from webvtt import WebVTT
 
 
-class VideoSectionData:
+class VideoSegmentData:
     """
-    Represents a section of a video, containing the start time of the section in seconds, the transcript of the
+    Represents a segment of a video, containing the start time of the section in seconds, the transcript of the
     section, the screen text of the section, and a text embedding of the section's contents.
     """
 
@@ -27,6 +27,6 @@ class VideoData:
     Represents a video's data, containing the captions and the sections of the video.
     """
 
-    def __init__(self, vtt: WebVTT, sections: list[VideoSectionData]):
+    def __init__(self, vtt: WebVTT, segments: list[VideoSegmentData]):
         self.vtt: WebVTT = vtt
-        self.sections: list[VideoSectionData] = sections
+        self.segments: list[VideoSegmentData] = segments

@@ -3,10 +3,10 @@ import sys
 import time
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
 from fileextractlib.VideoProcessor import VideoProcessor
-from fileextractlib.VideoData import VideoSectionData
+from fileextractlib.VideoData import VideoSegmentData
 
 class LectureVideoEmbeddingGenerator:
-    def generate_embeddings(self, sections: list[VideoSectionData]):
+    def generate_embeddings(self, sections: list[VideoSegmentData]):
         sentence_embedding_runner = SentenceEmbeddingRunner()
 
         for section in sections:
@@ -22,6 +22,6 @@ if __name__ == "__main__":
     del video_processor
 
     generator = LectureVideoEmbeddingGenerator()
-    generator.generate_embeddings(video_data.sections)
+    generator.generate_embeddings(video_data.segments)
     end_time = time.time()
     print("Embedding generated successfully in " + str(end_time - start_time) + " seconds.")
