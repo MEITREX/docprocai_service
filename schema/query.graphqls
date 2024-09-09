@@ -58,6 +58,14 @@ interface MediaRecordSegment {
     UUID of the media record this segment is part of.
     """
     mediaRecordId: UUID!
+    """
+    Base64-encoded image thumbnail for this segment.
+    """
+    thumbnail: String!
+    """
+    Title of this segment.
+    """
+    title: String
 }
 
 type DocumentRecordSegment implements MediaRecordSegment {
@@ -77,6 +85,14 @@ type DocumentRecordSegment implements MediaRecordSegment {
     The text snippet of the document this search result references.
     """
     text: String!
+    """
+    Base64-encoded image thumbnail for this segment.
+    """
+    thumbnail: String!
+    """
+    Title of this segment.
+    """
+    title: String
 }
 
 type VideoRecordSegment implements MediaRecordSegment {
@@ -100,5 +116,13 @@ type VideoRecordSegment implements MediaRecordSegment {
     Textual transcript of the spoken text during the video snippet this search result references.
     """
     transcript: String!
+    """
+    Base64-encoded image thumbnail for this segment.
+    """
+    thumbnail: String!
+    """
+    Title of this segment.
+    """
+    title: String
 }
 

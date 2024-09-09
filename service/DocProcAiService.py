@@ -1,14 +1,14 @@
 import asyncio
+import itertools
 
 import PIL.Image
-from pgvector.psycopg import register_vector
-import psycopg
 import fileextractlib.LlamaRunner as LlamaRunner
 import threading
 import queue
 from typing import Callable, Self, Awaitable
 import uuid
 import client.MediaServiceClient as MediaServiceClient
+from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
 from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
@@ -17,6 +17,10 @@ import logging
 from fileextractlib.VideoProcessor import VideoProcessor
 from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
 import io
+import dto.mapper as mapper
+
+from persistence.DbConnector import DbConnector
+from persistence.entities import DocumentSegmentEntity, VideoSegmentEntity, SemanticSearchResultEntity
 
 _logger = logging.getLogger(__name__)
 
@@ -24,59 +28,7 @@ _logger = logging.getLogger(__name__)
 class DocProcAiService:
     def __init__(self):
         # TODO: Make db connection configurable
-        self._db_conn: psycopg.Connection = psycopg.connect(
-            "user=root password=root host=database-docprocai port=5432 dbname=search-service",
-            autocommit=True,
-            row_factory=psycopg.rows.dict_row
-        )
-
-        # ensure pgvector extension is installed, we need it to store text embeddings
-        self._db_conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-        register_vector(self._db_conn)
-
-        # db_conn.execute("DROP TABLE IF EXISTS document_sections")
-        # db_conn.execute("DROP TABLE IF EXISTS video_sections")
-
-        # ensure database tables exist
-        # table which contains the sections of all documents including their text, page number, and text embedding
-        self._db_conn.execute("""
-                              CREATE TABLE IF NOT EXISTS document_sections (
-                                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                                text text,
-                                media_record uuid,
-                                page int,
-                                thumbnail bytea,
-                                embedding vector(1024)
-                              );
-                              """)
-        # table which contains the sections of all videos including their screen text, transcript, start time, and text
-        self._db_conn.execute("""
-                              CREATE TABLE IF NOT EXISTS video_sections (
-                                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                                screen_text text,
-                                transcript text,
-                                media_record uuid,
-                                start_time int,
-                                thumbnail bytea,
-                                embedding vector(1024)
-                              );
-                              """)
-        # table which contains the caption of full videos in WebVTT format. Primary key is the uuid of the media record
-        # the row stores captions for, and the vtt column stores the WebVTT formatted captions
-        self._db_conn.execute("""
-                              CREATE TABLE IF NOT EXISTS video_captions (
-                                media_record_id uuid PRIMARY KEY,
-                                vtt text
-                              );
-                              """)
-        # table which contains links between segments of different media records
-        self._db_conn.execute("""
-                              CREATE TABLE IF NOT EXISTS media_record_links (
-                                content_id uuid,
-                                segment1_id uuid,
-                                segment2_id uuid
-                              );
-                              """)
+        self.database = DbConnector("user=root password=root host=database-docprocai port=5432 dbname=search-service")
 
         # graphql client for interacting with the media service
         self._media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
@@ -102,10 +54,10 @@ class DocProcAiService:
     def __del__(self):
         self._keep_background_task_thread_alive = False
 
-        if self._db_conn is not None:
-            self._db_conn.close()
-
     def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
+        """
+        Enqueues a task to ingest a media record with the given ID, which will be executed in the background.
+        """
         async def ingest_media_record_task():
             media_record = await self._media_service_client.get_media_record_type_and_download_url(media_record_id)
             download_url = media_record["internalDownloadUrl"]
@@ -121,13 +73,9 @@ class DocProcAiService:
                 for section in document_data.pages:
                     thumbnail_bytes = io.BytesIO()
                     section.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
-                    self._db_conn.execute(
-                        query="""
-                              INSERT INTO document_sections (text, media_record, page, thumbnail, embedding) 
-                              VALUES (%s, %s, %s, %s, %s)
-                              """,
-                        params=(section.text, media_record_id, section.page_number,
-                                thumbnail_bytes.getvalue(), section.embedding))
+                    # TODO: Fill placeholder title
+                    self.database.insert_document_segment(section.text, media_record_id, section.page_number,
+                                                          thumbnail_bytes.getvalue(), "Placeholder Title", section.embedding)
             elif record_type == "VIDEO":
                 # TODO: make this configurable
                 video_processor = VideoProcessor(section_image_similarity_threshold=0.9, minimum_section_length=15)
@@ -135,32 +83,17 @@ class DocProcAiService:
                 del video_processor
 
                 # store the captions of the video
-                self._db_conn.execute(
-                    query="""
-                          INSERT INTO video_captions (media_record_id, vtt)
-                          VALUES (%s, %s)
-                          """,
-                    params=(media_record_id, video_data.vtt.content))
+                self.database.insert_video_captions(media_record_id, video_data.vtt.content)
 
                 # generate and store text embeddings for the sections of the video
                 self._lecture_video_embedding_generator.generate_embeddings(video_data.sections)
                 for section in video_data.sections:
                     thumbnail_bytes = io.BytesIO()
                     section.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
-                    self._db_conn.execute(
-                        query="""
-                              INSERT INTO video_sections (
-                                screen_text,
-                                transcript,
-                                media_record,
-                                start_time,
-                                thumbnail,
-                                embedding
-                              )
-                              VALUES (%s, %s, %s, %s, %s, %s)
-                              """,
-                        params=(section.screen_text, section.transcript, media_record_id,
-                                section.start_time, thumbnail_bytes.getvalue(), section.embedding))
+                    # TODO: Fill placeholder title
+                    self.database.insert_video_segment(section.screen_text, section.transcript, media_record_id,
+                                                       section.start_time, thumbnail_bytes.getvalue(),
+                                                       "Placeholder Title", section.embedding)
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
@@ -170,60 +103,28 @@ class DocProcAiService:
         self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, priority))
 
     def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID, media_record_ids: list[uuid.UUID]):
+        """
+        Enqueues a task to generate media record links for a content with the given ID, which will be executed in the
+        background.
+        """
         def generate_content_media_record_links_task():
             _logger.debug("Generating content media record links for content " + str(content_id) + "...")
-            query = """
-            WITH document_results AS (
-                SELECT
-                    id,
-                    media_record AS "mediaRecordId",
-                    'document' AS source,
-                    page,
-                    NULL::integer AS "startTime",
-                    text AS "text",
-                    thumbnail
-                FROM document_sections
-                WHERE media_record = ANY(%(mediaRecordIds)s)
-            ),
-            video_results AS (
-                SELECT 
-                    id,
-                    media_record AS "mediaRecordId",
-                    'video' AS source,
-                    NULL::integer AS page,
-                    start_time AS "startTime",
-                    screen_text AS "text",
-                    thumbnail
-                FROM video_sections
-                WHERE media_record = ANY(%(mediaRecordIds)s)
-            ),
-            results AS (
-                SELECT * FROM document_results
-                UNION ALL
-                SELECT * FROM video_results
-            )
-            SELECT * FROM results
-            """
 
             # we could first run a query to check if any records even match, but considering that linking usually only
             # happens after ingestion, we can assume that the records exist, so that would be an unnecessary query
-            query_result = self._db_conn.execute(query=query, params={"mediaRecordIds": media_record_ids}).fetchall()
-
-            # create separate lists of records for each media record
-            media_records_segments: dict[uuid.UUID, list] = {}
-            # group the results by media record id
-            for result in query_result:
-                media_record_id: uuid.UUID = result["mediaRecordId"]
-                if media_record_id not in media_records_segments:
-                    media_records_segments[media_record_id] = []
-                media_records_segments[media_record_id].append(result)
+            # From the returned list, create a dict sorted by which segment is associated with which media record
+            media_records_segments: dict[uuid.UUID, list[DocumentSegmentEntity | VideoSegmentEntity]] = {}
+            for result in self.database.get_record_segments_by_media_record_ids(media_record_ids):
+                if result.media_record_id not in media_records_segments:
+                    media_records_segments[result.media_record_id] = []
+                media_records_segments[result.media_record_id].append(result)
 
             # now we can check for links
             # go through each media record's segments
             for media_record_id, segments in reversed(media_records_segments.items()):
                 for segment in segments:
                     # get the text of the segment
-                    segment_thumbnail = PIL.Image.open(io.BytesIO(segment["thumbnail"]))
+                    segment_thumbnail = PIL.Image.open(io.BytesIO(segment.thumbnail))
 
                     # TODO: Only crop if video
                     cropped_segment_thumbnail = segment_thumbnail.crop((
@@ -248,7 +149,7 @@ class DocProcAiService:
                         max_similarity_segment_id = None
                         for other_segment in other_segments:
                             # resize the other segment's thumbnail, so it's the same size as the template thumbnail
-                            other_segment_thumbnail = PIL.Image.open(io.BytesIO(other_segment["thumbnail"]))
+                            other_segment_thumbnail = PIL.Image.open(io.BytesIO(other_segment.thumbnail))
                             size_ratio = segment_thumbnail.height / other_segment_thumbnail.height
                             other_segment_thumbnail = other_segment_thumbnail.resize(
                                 (int(other_segment_thumbnail.width * size_ratio), segment_thumbnail.height))
@@ -258,16 +159,16 @@ class DocProcAiService:
                             similarity = image_template_matcher.match(other_segment_thumbnail)
                             if similarity > max_similarity:
                                 max_similarity = similarity
-                                max_similarity_segment_id = other_segment["id"]
+                                max_similarity_segment_id = other_segment.id
 
                         # TODO: Make this configurable
                         if max_similarity > 0.75:
                             # create a link between the two segments
                             # skip if a link between these segments already exists
-                            if not self.does_link_between_media_record_segments_exist(segment["id"],
+                            if not self.does_link_between_media_record_segments_exist(segment.id,
                                                                                       max_similarity_segment_id):
-                                self.create_link_between_media_record_segments(content_id,
-                                                                               segment["id"],
+                                self.database.insert_media_record_segment_link(content_id,
+                                                                               segment.id,
                                                                                max_similarity_segment_id)
 
             _logger.debug("Generated content media record links for content " + str(content_id) + ".")
@@ -285,216 +186,91 @@ class DocProcAiService:
                                                   content_id: uuid.UUID,
                                                   segment_id: uuid.UUID,
                                                   other_segment_id: uuid.UUID):
-        self._db_conn.execute("INSERT INTO media_record_links (content_id, segment1_id, segment2_id) "
-                              + "VALUES (%s, %s, %s)",
-                              (content_id, segment_id, other_segment_id))
+        """
+        Creates a link between two media record segments which are associated (e.g. part of a video and the respective
+        slide in the PDF).
+        """
+        self.database.insert_media_record_segment_link(content_id, segment_id, other_segment_id)
 
     def does_link_between_media_record_segments_exist(self, segment_id: uuid.UUID, other_segment_id: uuid.UUID) -> bool:
-        result = self._db_conn.execute("""
-        SELECT EXISTS(
-            SELECT 1 FROM media_record_links 
-            WHERE (segment1_id = %(id1)s AND segment2_id = %(id2)s) 
-                OR (segment1_id = %(id2)s AND segment2_id = %(id1)s)
-        )
-        """, {"id1": segment_id, "id2": other_segment_id}).fetchone()
-
-        return result["exists"]
+        """
+        Checks if a link between two media record segments exists by their IDs.
+        """
+        return self.database.does_segment_link_exist(segment_id, other_segment_id)
 
     def delete_entries_of_media_record(self, media_record_id: uuid.UUID):
-        # delete media record segment links
-        self._db_conn.execute("""
-            DELETE FROM media_record_links 
-            WHERE segment1_id = %(media_record_id)s OR segment2_id = %(media_record_id)s""",
-                              {
-                                    "media_record_id": media_record_id
-                              })
+        """
+        Deletes all entries this service's db keeps which are associated with the specified media record.
+        This includes the segment links and the segments of the media record themselves.
+        """
+        # delete segments associated with this media record
+        segment_ids = list(itertools.chain(
+            [x.id for x in self.database.delete_video_segments_by_media_record_id([media_record_id])],
+            [x.id for x in self.database.delete_document_segments_by_media_record_id([media_record_id])]
+        ))
 
-        # delete media record segments
-        self._db_conn.execute("DELETE FROM document_sections WHERE media_record = %s",
-                              (media_record_id,))
-        self._db_conn.execute("DELETE FROM video_sections WHERE media_record = %s",
-                              (media_record_id,))
+        # delete media record segment links which contain any of these segments
+        self.database.delete_media_record_segment_links_by_segment_ids(segment_ids)
 
-    def get_media_record_links_for_content(self, content_id: uuid.UUID):
-        result = self._db_conn.execute("""
-            SELECT
-                segment1_id AS "segment1Id",
-                segment2_id AS "segment2Id"
-            FROM media_record_links WHERE content_id = %s
-            """, (content_id,)).fetchall()
+    def get_media_record_links_for_content(self, content_id: uuid.UUID) -> list[MediaRecordSegmentLinkDto]:
+        """
+        Gets all links between media record segments which are part of the specified content.
+        """
+        result_links = self.database.get_segment_links_by_content_id(content_id)
 
         all_segment_ids = []
-        for segment_link in result:
-            all_segment_ids.append(segment_link["segment1Id"])
-            all_segment_ids.append(segment_link["segment2Id"])
+        for segment_link in result_links:
+            all_segment_ids.append(segment_link.segment1_id)
+            all_segment_ids.append(segment_link.segment2_id)
 
-        result_segments = self._db_conn.execute("""
-            WITH document_results AS (
-                SELECT
-                    id,
-                    media_record AS "mediaRecordId",
-                    'document' AS source,
-                    page,
-                    NULL::integer AS "startTime",
-                    text,
-                    NULL::text AS "screenText",
-                    NULL::text AS transcript
-                FROM document_sections
-                WHERE id = ANY(%(segmentIds)s)
-            ),
-            video_results AS (
-                SELECT 
-                    id,
-                    media_record AS "mediaRecordId",
-                    'video' AS source,
-                    NULL::integer AS page,
-                    start_time AS "startTime",
-                    NULL::text AS text,
-                    screen_text AS "screenText",
-                    transcript
-                FROM video_sections
-                WHERE id = ANY(%(segmentIds)s)
-            ),
-            results AS (
-                SELECT * FROM document_results
-                UNION ALL
-                SELECT * FROM video_results
-            )
-            SELECT * FROM results;
-        """, {"segmentIds": all_segment_ids}).fetchall()
+        result_segments = self.database.get_record_segments_by_ids(all_segment_ids)
 
-        for x in result_segments:
-            if x["source"] == "document":
-                del x["startTime"]
-                del x["screenText"]
-                del x["transcript"]
-            elif x["source"] == "video":
-                del x["page"]
-                del x["text"]
-
+        # go over all links and resolve the referenced segments from entity to dto
         return [{
-                    "segment1": next(x for x in result_segments if x["id"] == segment_link["segment1Id"]),
-                    "segment2": next(x for x in result_segments if x["id"] == segment_link["segment2Id"])
-                } for segment_link in result]
+                    "segment1": mapper.media_record_segment_entity_to_dto(
+                        next(x for x in result_segments if x.id == segment_link.segment1_id)),
+                    "segment2": mapper.media_record_segment_entity_to_dto(
+                        next(x for x in result_segments if x.id == segment_link.segment2_id))
+                } for segment_link in result_links]
 
-    def get_media_record_segments(self, media_record_id: uuid.UUID):
-        query = """
-            WITH document_results AS (
-                SELECT
-                    id,
-                    media_record AS "mediaRecordId",
-                    'document' AS source,
-                    page,
-                    NULL::integer AS "startTime",
-                    text,
-                    NULL::text AS "screenText",
-                    NULL::text AS transcript
-                FROM document_sections
-                WHERE media_record = %(id)s
-            ),
-            video_results AS (
-                SELECT 
-                    id,
-                    media_record AS "mediaRecordId",
-                    'video' AS source,
-                    NULL::integer AS page,
-                    start_time AS "startTime",
-                    NULL::text AS text,
-                    screen_text AS "screenText",
-                    transcript
-                FROM video_sections
-                WHERE media_record = %(id)s
-            ),
-            results AS (
-                SELECT * FROM document_results
-                UNION ALL
-                SELECT * FROM video_results
-            )
-            SELECT * FROM results
-            """
+    def get_media_record_segments(self, media_record_id: uuid.UUID) \
+            -> list[DocumentRecordSegmentDto | VideoRecordSegmentDto]:
+        """
+        Gets the segments of the specified media record.
+        """
+        results = self.database.get_record_segments_by_media_record_ids([media_record_id])
 
-        results = self._db_conn.execute(query, {"id": media_record_id}).fetchall()
+        return [mapper.media_record_segment_entity_to_dto(result) for result in results]
 
-        for result in results:
-            if result["source"] == "document":
-                del result["startTime"]
-                del result["screenText"]
-                del result["transcript"]
-            elif result["source"] == "video":
-                del result["page"]
-                del result["text"]
-
-        return results
-
-    def get_media_record_captions(self, media_record_id: uuid.UUID) -> str:
-        result = self._db_conn.execute("SELECT vtt FROM video_captions WHERE media_record_id = %s",
-                                       (media_record_id,)).fetchone()
-        return result["vtt"]
+    def get_media_record_captions(self, media_record_id: uuid.UUID) -> str | None:
+        """
+        Returns the captions of the specified media record as a string in WebVTT format if the specified media record
+        is a video and captions are available. Otherwise, returns None.
+        """
+        return self.database.get_video_captions_by_media_record_id(media_record_id)
 
     def semantic_search(self,
                         query_text: str,
                         count: int,
                         media_record_blacklist: list[uuid.UUID],
-                        media_record_whitelist: list[uuid.UUID]) -> list[dict[str, any]]:
+                        media_record_whitelist: list[uuid.UUID]) -> list[SemanticSearchResultDto]:
+        """
+        Performs a semantic search on the specified query text. Returns the specified number of media record segments.
+        Adheres to the passed black- & whitelist. Segments of media records whose ID is present in the blacklist OR
+        whose ID is NOT present in the whitelist will be excluded from the results.
+        """
         query_embedding = self._sentence_embedding_runner.generate_embeddings([query_text])[0]
 
-        # sql query to get the closest embeddings to the query embedding, both from the video and document tables
-        query = """
-            WITH document_results AS (
-                SELECT
-                    media_record AS "mediaRecordId",
-                    'document' AS source,
-                    page,
-                    NULL::integer AS "startTime",
-                    text,
-                    NULL::text AS "screenText",
-                    NULL::text AS transcript,
-                    embedding <=> %(query_embedding)s AS score
-                FROM document_sections
-                WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
-            ),
-            video_results AS (
-                SELECT 
-                    media_record AS "mediaRecordId",
-                    'video' AS source,
-                    NULL::integer AS page,
-                    start_time AS "startTime",
-                    NULL::text AS text,
-                    screen_text AS "screenText",
-                    transcript,
-                    embedding <=> %(query_embedding)s AS score
-                FROM video_sections
-                WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
-            ),
-            results AS (
-                SELECT * FROM document_results
-                UNION ALL
-                SELECT * FROM video_results
-            )
-            SELECT * FROM results ORDER BY score LIMIT %(count)s
-        """
+        query_result = self.database.get_top_record_segments_by_embedding_distance(query_embedding,
+                                                                                   count,
+                                                                                   media_record_blacklist,
+                                                                                   media_record_whitelist)
 
-        query_result = self._db_conn.execute(query=query, params={
-            "query_embedding": query_embedding,
-            "count": count,
-            "mediaRecordBlacklist": media_record_blacklist,
-            "mediaRecordWhitelist": media_record_whitelist
-        }).fetchall()
+        return [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
-        for result in query_result:
-            if result["source"] == "document":
-                del result["startTime"]
-                del result["screenText"]
-                del result["transcript"]
-            elif result["source"] == "video":
-                del result["page"]
-                del result["text"]
-
-        return [{
-            "score": result["score"],
-            "mediaRecordSegment": result,
-        } for result in query_result]
-
+    """
+    Helper class used by the internal background task queue of the service.
+    """
     class BackgroundTaskItem:
         def __init__(self, task: Callable[[], Awaitable[None]], priority: int):
             self.task: Callable[[], Awaitable[None]] = task
@@ -503,9 +279,11 @@ class DocProcAiService:
         def __lt__(self, other: Self):
             return self.priority < other.priority
 
-
 def _background_task_runner(task_queue: queue.PriorityQueue[DocProcAiService.BackgroundTaskItem],
                             keep_alive: threading.Event):
+    """
+    Runner function which executes tasks from the task queue in the background.
+    """
     while keep_alive.is_set():
         try:
             background_task_item = task_queue.get(block=True, timeout=1)

@@ -5,6 +5,14 @@ from service.DocProcAiService import DocProcAiService
 from fastapi import FastAPI
 import uvicorn
 
+import logging
+
+# Set logging level to debug
+logging.basicConfig(level=logging.DEBUG)
+# Suppress numba logging lower than warnings, otherwise console is spammed by debug messages related to numba
+# JIT compiling
+logging.getLogger("numba").setLevel(logging.WARNING)
+
 if __name__ == "__main__":
     service = DocProcAiService()
 
