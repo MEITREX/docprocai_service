@@ -191,6 +191,7 @@ class DbConnector:
         query = """
                     WITH document_results AS (
                         SELECT
+                            id,
                             media_record_id,
                             'document' AS source,
                             page,
@@ -206,6 +207,7 @@ class DbConnector:
                     ),
                     video_results AS (
                         SELECT 
+                            id,
                             media_record_id,
                             'video' AS source,
                             NULL::integer AS page,
