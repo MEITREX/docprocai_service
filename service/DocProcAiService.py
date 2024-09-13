@@ -11,6 +11,7 @@ import client.MediaServiceClient as MediaServiceClient
 from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
 from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
+from fileextractlib.LectureLlmGenerator import LectureLlmGenerator
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
 import logging
@@ -20,7 +21,7 @@ import io
 import dto.mapper as mapper
 
 from persistence.DbConnector import DbConnector
-from persistence.entities import DocumentSegmentEntity, VideoSegmentEntity, SemanticSearchResultEntity
+from persistence.entities import *
 
 _logger = logging.getLogger(__name__)
 
@@ -31,35 +32,37 @@ class DocProcAiService:
         self.database = DbConnector("user=root password=root host=database-docprocai port=5432 dbname=search-service")
 
         # graphql client for interacting with the media service
-        self._media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
+        self.__media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
 
         # only load the llamaRunner the first time we actually need it, not now
-        self._llama_runner: LlamaRunner.LlamaRunner | None = None
+        self.__llama_runner: LlamaRunner.LlamaRunner | None = None
 
-        self._sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
+        self.__sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
 
-        self._lecture_pdf_embedding_generator: LectureDocumentEmbeddingGenerator = LectureDocumentEmbeddingGenerator()
-        self._lecture_video_embedding_generator: LectureVideoEmbeddingGenerator = LectureVideoEmbeddingGenerator()
+        self.__lecture_pdf_embedding_generator: LectureDocumentEmbeddingGenerator = LectureDocumentEmbeddingGenerator()
+        self.__lecture_video_embedding_generator: LectureVideoEmbeddingGenerator = LectureVideoEmbeddingGenerator()
 
-        self._background_task_queue: queue.PriorityQueue[DocProcAiService.BackgroundTaskItem] = queue.PriorityQueue()
+        self.__lecture_llm_generator: LectureLlmGenerator = LectureLlmGenerator()
 
-        self._keep_background_task_thread_alive: threading.Event = threading.Event()
-        self._keep_background_task_thread_alive.set()
+        self.__background_task_queue: queue.PriorityQueue[DocProcAiService.BackgroundTaskItem] = queue.PriorityQueue()
 
-        self._background_task_thread: threading.Thread = threading.Thread(
+        self.__keep_background_task_thread_alive: threading.Event = threading.Event()
+        self.__keep_background_task_thread_alive.set()
+
+        self.__background_task_thread: threading.Thread = threading.Thread(
             target=_background_task_runner,
-            args=[self._background_task_queue, self._keep_background_task_thread_alive])
-        self._background_task_thread.start()
+            args=[self.__background_task_queue, self.__keep_background_task_thread_alive])
+        self.__background_task_thread.start()
 
     def __del__(self):
-        self._keep_background_task_thread_alive = False
+        self.__keep_background_task_thread_alive = False
 
     def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
         """
         Enqueues a task to ingest a media record with the given ID, which will be executed in the background.
         """
         async def ingest_media_record_task():
-            media_record = await self._media_service_client.get_media_record_type_and_download_url(media_record_id)
+            media_record = await self.__media_service_client.get_media_record_type_and_download_url(media_record_id)
             download_url = media_record["internalDownloadUrl"]
 
             record_type: str = media_record["type"]
@@ -69,13 +72,17 @@ class DocProcAiService:
             if record_type == "PRESENTATION" or record_type == "DOCUMENT":
                 document_processor = DocumentProcessor()
                 document_data = document_processor.process(download_url)
-                self._lecture_pdf_embedding_generator.generate_embeddings(document_data.pages)
+                self.__lecture_pdf_embedding_generator.generate_embeddings(document_data.pages)
                 for segment in document_data.pages:
                     thumbnail_bytes = io.BytesIO()
                     segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
                     # TODO: Fill placeholder title
                     self.database.insert_document_segment(segment.text, media_record_id, segment.page_number,
                                                           thumbnail_bytes.getvalue(), "Placeholder Title", segment.embedding)
+
+                # generate and store a summary of this media record
+                self.__lecture_llm_generator.generate_summary_for_document(document_data)
+                self.database.insert_media_record(media_record_id, document_data.summary)
             elif record_type == "VIDEO":
                 # TODO: make this configurable
                 video_processor = VideoProcessor(segment_image_similarity_threshold=0.9, minimum_segment_length=15)
@@ -85,22 +92,29 @@ class DocProcAiService:
                 # store the captions of the video
                 self.database.insert_video_captions(media_record_id, video_data.vtt.content)
 
-                # generate and store text embeddings for the segments of the video
-                self._lecture_video_embedding_generator.generate_embeddings(video_data.segments)
+                # generate text embeddings for the segments of the video
+                self.__lecture_video_embedding_generator.generate_embeddings(video_data.segments)
+
+                # generate titles for the video's segments
+                self.__lecture_llm_generator.generate_titles_for_video(video_data)
+
                 for segment in video_data.segments:
                     thumbnail_bytes = io.BytesIO()
                     segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
-                    # TODO: Fill placeholder title
                     self.database.insert_video_segment(segment.screen_text, segment.transcript, media_record_id,
                                                        segment.start_time, thumbnail_bytes.getvalue(),
-                                                       "Placeholder Title", segment.embedding)
+                                                       segment.title, segment.embedding)
+
+                # generate and store a summary of this media record
+                self.__lecture_llm_generator.generate_summary_for_video(video_data)
+                self.database.insert_media_record(media_record_id, video_data.summary)
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
             _logger.info("Finished ingesting media record with download URL: " + download_url)
 
         priority = 0
-        self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, priority))
+        self.__background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, priority))
 
     def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID, media_record_ids: list[uuid.UUID]):
         """
@@ -249,6 +263,14 @@ class DocProcAiService:
         """
         return self.database.get_video_captions_by_media_record_id(media_record_id)
 
+    def get_media_record_summary(self, media_record_id: uuid.UUID) -> list[str]:
+        """
+        Returns a summary of the media record's contents as a list of strings which are bullet points
+        :param media_record_id: The id of the media record to get a summary for
+        :return: List of strings, where each string is a bullet point of the summary
+        """
+        return self.database.get_media_record_summary_by_media_record_id(media_record_id)
+
     def semantic_search(self,
                         query_text: str,
                         count: int,
@@ -259,7 +281,7 @@ class DocProcAiService:
         Adheres to the passed black- & whitelist. Segments of media records whose ID is present in the blacklist OR
         whose ID is NOT present in the whitelist will be excluded from the results.
         """
-        query_embedding = self._sentence_embedding_runner.generate_embeddings([query_text])[0]
+        query_embedding = self.__sentence_embedding_runner.generate_embeddings([query_text])[0]
 
         query_result = self.database.get_top_record_segments_by_embedding_distance(query_embedding,
                                                                                    count,

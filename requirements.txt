@@ -22,3 +22,4 @@ opencv-python
 requests
 tika
 pypdf
+peft

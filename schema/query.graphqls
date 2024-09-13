@@ -34,6 +34,14 @@ type Query {
     any permissions check and should not be called without any validation of the caller's permissions. ⚠️
     """
     _internal_noauth_getMediaRecordCaptions(mediaRecordId: UUID!): String
+    """
+    Gets a summary of the specified media record's contents in the form of bullet points. Returns a list of strings
+    where each string is a bullet point of the summary.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getMediaRecordSummary(mediaRecordId: UUID!): [String!]!
 }
 
 type MediaRecordSegmentLink {

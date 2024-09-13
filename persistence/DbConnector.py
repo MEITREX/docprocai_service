@@ -2,6 +2,7 @@ import json
 
 import psycopg
 from uuid import UUID
+
 from pgvector.psycopg import register_vector
 from torch import Tensor
 
@@ -20,49 +21,56 @@ class DbConnector:
         self.db_connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
         register_vector(self.db_connection)
 
+        self.db_connection.execute("""
+                                   CREATE TABLE IF NOT EXISTS media_records (
+                                     id uuid PRIMARY KEY,
+                                     summary text[]
+                                   );
+                                   """)
+
         # ensure database tables exist
         # table which contains the sections of all documents including their text, page number, and text embedding
         self.db_connection.execute("""
-                              CREATE TABLE IF NOT EXISTS document_segments (
-                                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                                text text,
-                                media_record_id uuid,
-                                page int,
-                                thumbnail bytea,
-                                title text,
-                                embedding vector(1024)
-                              );
-                              """)
+                                   CREATE TABLE IF NOT EXISTS document_segments (
+                                     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                                     text text,
+                                     media_record_id uuid,
+                                     page int,
+                                     thumbnail bytea,
+                                     title text,
+                                     embedding vector(1024)
+                                   );
+                                   """)
         # table which contains the sections of all videos including their screen text, transcript, start time, and text
         self.db_connection.execute("""
-                              CREATE TABLE IF NOT EXISTS video_segments (
-                                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                                screen_text text,
-                                transcript text,
-                                media_record_id uuid,
-                                start_time int,
-                                thumbnail bytea,
-                                title text,
-                                embedding vector(1024)
-                              );
-                              """)
+                                   CREATE TABLE IF NOT EXISTS video_segments (
+                                     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                                     screen_text text,
+                                     transcript text,
+                                     media_record_id uuid,
+                                     start_time int,
+                                     thumbnail bytea,
+                                     title text,
+                                     embedding vector(1024)
+                                   );
+                                   """)
         # table which contains the caption of full videos in WebVTT format. Primary key is the uuid of the media record
         # the row stores captions for, and the vtt column stores the WebVTT formatted captions
         self.db_connection.execute("""
-                              CREATE TABLE IF NOT EXISTS video_captions (
-                                media_record_id uuid PRIMARY KEY,
-                                vtt text
-                              );
-                              """)
+                                   CREATE TABLE IF NOT EXISTS video_captions (
+                                     media_record_id uuid PRIMARY KEY,
+                                     vtt text
+                                   );
+                                   """)
         # table which contains links between segments of different media records
         # we can't use foreign keys here because the segments live in multiple tables
         self.db_connection.execute("""
-                              CREATE TABLE IF NOT EXISTS media_record_links (
-                                content_id uuid,
-                                segment1_id uuid,
-                                segment2_id uuid
-                              );
-                              """)
+                                   CREATE TABLE IF NOT EXISTS media_record_links (
+                                     content_id uuid,
+                                     segment1_id uuid,
+                                     segment2_id uuid
+                                   );
+                                   """)
 
     def insert_document_segment(self, text: str, media_record_id: UUID, page_index: int,
                                 thumbnail: bytes, title: str, embedding: Tensor) -> None:
@@ -106,6 +114,15 @@ class DbConnector:
                   """,
             params=(content_id, segment1_id, segment2_id))
 
+    def insert_media_record(self, id: UUID, summary: list[str]):
+        self.db_connection.execute(
+            query="""
+                  INSERT INTO media_records (id, summary)
+                  VALUES (%s, %s)
+                  """,
+            params=(id, summary)
+        )
+
     def delete_media_record_segment_links_by_segment_ids(self, segment_ids: list[UUID]) -> list[MediaRecordSegmentLinkEntity]:
         query_result = self.db_connection.execute(
             """
@@ -138,6 +155,16 @@ class DbConnector:
             {"mediaRecordIds": media_record_ids})
 
         return [DbConnector.__video_segment_query_result_to_object(x) for x in query_results]
+
+    def get_media_record_summary_by_media_record_id(self, media_record_id) -> list[str]:
+        query_result = self.db_connection.execute(
+            "SELECT summary FROM media_records WHERE media_record_id = %s",
+            (media_record_id,)).fetchone()
+
+        if query_result is None:
+            return []
+
+        return query_result["summary"]
 
     def get_video_captions_by_media_record_id(self, media_record_id: UUID) -> str | None:
         query_result = self.db_connection.execute(

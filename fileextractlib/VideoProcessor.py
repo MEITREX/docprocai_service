@@ -99,6 +99,7 @@ class VideoProcessor:
                     transcript=vtt.captions[image_index].text[2:],
                     screen_text=None,
                     thumbnail=None,
+                    title=None,
                     embedding=None)
                 current_segment_image = image
                 current_segment_cropped_image = cropped_image
@@ -128,6 +129,7 @@ class VideoProcessor:
                         transcript=vtt.captions[image_index].text[2:],
                         screen_text=None,
                         thumbnail=None,
+                        title=None,
                         embedding=None)
                     current_segment_image = image
                     current_segment_cropped_image = cropped_image

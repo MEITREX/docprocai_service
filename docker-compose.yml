@@ -21,6 +21,13 @@ services:
     ports:
       - "9900:9900"
       - "9901:9901"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
   dapr-docprocai:
     image: "daprio/daprd"
     command: [

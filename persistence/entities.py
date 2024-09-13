@@ -1,6 +1,11 @@
 from uuid import UUID
 
 
+class MediaRecordEntity:
+    def __init__(self, id: UUID, summary: list[str]):
+        self.summary = summary
+
+
 class DocumentSegmentEntity:
     def __init__(self, id: UUID, media_record_id: UUID, page_index: int, text: str, thumbnail: bytes, title: str):
         self.id = id
@@ -22,11 +27,13 @@ class VideoSegmentEntity:
         self.thumbnail = thumbnail
         self.title = title
 
+
 class MediaRecordSegmentLinkEntity:
     def __init__(self, content_id: UUID, segment1_id: UUID, segment2_id: UUID):
         self.content_id = content_id
         self.segment1_id = segment1_id
         self.segment2_id = segment2_id
+
 
 class SemanticSearchResultEntity:
     def __init__(self, score: float, media_record_segment_entity: VideoSegmentEntity | DocumentSegmentEntity):
