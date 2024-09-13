@@ -1,0 +1,5 @@
+venv
+.idea
+.vs
+.vscode
+llm_data
