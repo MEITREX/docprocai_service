@@ -201,7 +201,7 @@ class DbConnector:
                             title,
                             thumbnail,
                             embedding <=> %(query_embedding)s AS score
-                        FROM document_sections
+                        FROM document_segments
                         WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
                     ),
                     video_results AS (
@@ -216,7 +216,7 @@ class DbConnector:
                             title,
                             thumbnail,
                             embedding <=> %(query_embedding)s AS score
-                        FROM video_sections
+                        FROM video_segments
                         WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
                     ),
                     results AS (
