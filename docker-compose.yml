@@ -1,17 +1,18 @@
-version: "3.7"
-
 services:
-  database-docprocai:
+  database:
     image: pgvector/pgvector:pg16
     restart: always
+    expose:
+      - 5432
     ports:
-      - "9932:5432"
+      - "5432:5432"
     volumes:
-      - searchdata:/var/lib/postgresql/data
+      - dbdata:/var/lib/postgresql/data
+      - ./../docprocai_service/pg-init-scripts:/docker-entrypoint-initdb.d
     environment:
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=root
-      - POSTGRES_DB=search-service
+      - POSTGRES_CREATE_DB_DOCPROCAI_SERVICE=docprocai_service
   app-docprocai:
     build:
       context: ./../docprocai_service
@@ -21,6 +22,8 @@ services:
     ports:
       - "9900:9900"
       - "9901:9901"
+    depends_on:
+      - database
   dapr-docprocai:
     image: "daprio/daprd"
     command: [
@@ -37,7 +40,7 @@ services:
       - redis
     network_mode: "service:app-docprocai"
 volumes:
-  searchdata:
+  dbdata:
 networks:
   default:
       name: dapr-network
