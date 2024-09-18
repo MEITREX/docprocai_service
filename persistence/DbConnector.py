@@ -218,6 +218,7 @@ class DbConnector:
         query = """
                     WITH document_results AS (
                         SELECT
+                            id,
                             media_record_id,
                             'document' AS source,
                             page,
@@ -228,11 +229,12 @@ class DbConnector:
                             title,
                             thumbnail,
                             embedding <=> %(query_embedding)s AS score
-                        FROM document_sections
-                        WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
+                        FROM document_segments
+                        WHERE media_record_id = ANY(%(mediaRecordWhitelist)s) AND NOT media_record_id = ANY(%(mediaRecordBlacklist)s)
                     ),
                     video_results AS (
                         SELECT 
+                            id,
                             media_record_id,
                             'video' AS source,
                             NULL::integer AS page,
@@ -243,8 +245,8 @@ class DbConnector:
                             title,
                             thumbnail,
                             embedding <=> %(query_embedding)s AS score
-                        FROM video_sections
-                        WHERE media_record = ANY(%(mediaRecordWhitelist)s) AND NOT media_record = ANY(%(mediaRecordBlacklist)s)
+                        FROM video_segments
+                        WHERE media_record_id = ANY(%(mediaRecordWhitelist)s) AND NOT media_record_id = ANY(%(mediaRecordBlacklist)s)
                     ),
                     results AS (
                         SELECT * FROM document_results

@@ -29,7 +29,7 @@ _logger = logging.getLogger(__name__)
 class DocProcAiService:
     def __init__(self):
         # TODO: Make db connection configurable
-        self.database = DbConnector("user=root password=root host=database-docprocai port=5432 dbname=search-service")
+        self.database = DbConnector("user=root password=root host=database port=5432 dbname=docprocai_service")
 
         # graphql client for interacting with the media service
         self.__media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
