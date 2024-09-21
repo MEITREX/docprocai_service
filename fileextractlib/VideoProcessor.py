@@ -124,7 +124,11 @@ class VideoProcessor:
                     with io.BytesIO() as image_bytes:
                         current_segment_image.save(image_bytes, format="PNG")
                         image_bytes.seek(0)
-                        current_segment.screen_text = tika.parser.from_buffer(image_bytes)["content"].strip()
+                        tika_res = tika.parser.from_buffer(image_bytes)["content"]
+                        if tika_res is not None:
+                            current_segment.screen_text = tika_res.strip()
+                        else:
+                            current_segment.screen_text = ""
                     current_segment.thumbnail = current_segment_image
                     segments.append(current_segment)
                     # if the screen is not similar, we create a new segment
