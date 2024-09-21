@@ -109,7 +109,7 @@ class VideoProcessor:
             else:
                 # otherwise we check if the screen is similar to the current segment's screen
                 # image using template matching
-                matcher = ImageTemplateMatcher(template=current_segment_cropped_image)
+                matcher = ImageTemplateMatcher(template=current_segment_cropped_image, scaling_factor=0.4)
 
                 similarity = matcher.match(cropped_image)
 
