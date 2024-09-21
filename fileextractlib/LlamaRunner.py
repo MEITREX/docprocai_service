@@ -21,7 +21,7 @@ class LlamaRunner:
 
         tokenizer = AutoTokenizer.from_pretrained(model_id, quantization_config=quantization_config)
         model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
-        model = PeftModel.from_pretrained(model, lora_id).merge_and_unload()
+        #model = PeftModel.from_pretrained(model, lora_id).merge_and_unload()
 
         self.pipeline: Pipeline = pipeline(
             "text-generation",
@@ -30,13 +30,22 @@ class LlamaRunner:
             model_kwargs={"torch_dtype": torch.bfloat16},
         )
 
+        self.__hyperparameters = {
+            "temperature": 0.7,
+            "top_p": 0.1,
+            "top_k": 40,
+            "typical_p": 1,
+            "min_p": 0,
+            "repetition_penalty": 1.1
+        }
+
     def generate_text(self, prompt: str, answer_schema=None) -> str:
         if answer_schema is not None:
             parser = JsonSchemaParser(answer_schema)
             prefix_function = build_transformers_prefix_allowed_tokens_fn(self.pipeline.tokenizer, parser)
-            result = self.pipeline(prompt, prefix_allowed_tokens_fn=prefix_function, max_new_tokens=10000)
+            result = self.pipeline(prompt, prefix_allowed_tokens_fn=prefix_function, max_new_tokens=3000, **self.__hyperparameters)
         else:
-            result = self.pipeline(prompt, max_new_tokens=500)
+            result = self.pipeline(prompt, max_new_tokens=500, **self.__hyperparameters)
 
         return result[0]["generated_text"]
 

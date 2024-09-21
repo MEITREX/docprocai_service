@@ -5,7 +5,8 @@ from webvtt import WebVTT
 from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
 from fileextractlib.TranscriptGenerator import TranscriptGenerator
 import ffmpeg
-import pytesseract
+import tika
+import tika.parser
 import PIL.Image
 import io
 from fileextractlib.VideoData import VideoData, VideoSegmentData
@@ -23,6 +24,8 @@ class VideoProcessor:
     minimum segment length in seconds.
     """
     def __init__(self, segment_image_similarity_threshold: float = 0.9, minimum_segment_length: int = 15):
+        tika.initVM()
+
         self.segment_image_similarity_threshold: float = segment_image_similarity_threshold
         self.minimum_segment_length: int = minimum_segment_length
 
@@ -118,12 +121,14 @@ class VideoProcessor:
                     # Captions always have a leading "- ", so we remove it
                     current_segment.transcript += " " + vtt.captions[image_index].text[2:]
                 else:
-                    # if the screen is not similar, we create a new segment
-                    # Caption texts always have a leading "- ", so we remove it
-                    current_segment.screen_text = pytesseract.image_to_string(current_segment_image)
+                    with io.BytesIO() as image_bytes:
+                        current_segment_image.save(image_bytes, format="PNG")
+                        image_bytes.seek(0)
+                        current_segment.screen_text = tika.parser.from_buffer(image_bytes)["content"].strip()
                     current_segment.thumbnail = current_segment_image
                     segments.append(current_segment)
-
+                    # if the screen is not similar, we create a new segment
+                    # Caption texts always have a leading "- ", so we remove it
                     current_segment = VideoSegmentData(
                         start_time=vtt.captions[image_index].start_in_seconds,
                         transcript=vtt.captions[image_index].text[2:],

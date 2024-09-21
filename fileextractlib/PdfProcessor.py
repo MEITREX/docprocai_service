@@ -40,7 +40,7 @@ class PdfProcessor:
 
                 pages.append(PageData(page_index, page_text, page_images[page_index], None))
 
-        return DocumentData(pages)
+        return DocumentData(pages, [])
 
 
 if __name__ == "__main__":

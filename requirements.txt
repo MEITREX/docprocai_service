@@ -3,7 +3,7 @@ pytesseract
 transformers
 bitsandbytes
 pydantic
-lm-format-enforcer
+lm-format-enforcer>=0.10.7
 webvtt-py
 numpy>=1.26.4,<2.0.0
 openai-whisper
