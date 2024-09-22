@@ -8,6 +8,7 @@ import ffmpeg
 import tika
 import tika.parser
 import PIL.Image
+import PIL.ImageEnhance
 import io
 from fileextractlib.VideoData import VideoData, VideoSegmentData
 
@@ -121,10 +122,15 @@ class VideoProcessor:
                     # Captions always have a leading "- ", so we remove it
                     current_segment.transcript += " " + vtt.captions[image_index].text[2:]
                 else:
-                    with io.BytesIO() as image_bytes:
-                        current_segment_image.save(image_bytes, format="PNG")
-                        image_bytes.seek(0)
-                        current_segment.screen_text = tika.parser.from_buffer(image_bytes)["content"].strip()
+                    with io.BytesIO() as enhanced_image_bytes:
+                        # Increase contrast on the screenshot image, this improves OCR performance for colored text
+                        enhanced_image = PIL.ImageEnhance.Contrast(current_segment_image).enhance(3.0)
+                        # Save image bytes
+                        enhanced_image.save(enhanced_image_bytes, format="PNG")
+                        enhanced_image_bytes.seek(0)
+                        # Perform OCR using tika
+                        current_segment.screen_text = tika.parser.from_buffer(enhanced_image_bytes)["content"].strip()
+
                     current_segment.thumbnail = current_segment_image
                     segments.append(current_segment)
                     # if the screen is not similar, we create a new segment
