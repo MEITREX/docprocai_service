@@ -19,6 +19,8 @@ Note that GPU features require a supported GPU and OS to function, especially in
 
 > [!CAUTION]
 > Docker does not provide GPU-support for MacOS at this point in time, thus GPU-features of the service do not function on MacOS.
+>
+>  GPU features can be disabled using the `config.yaml`.
 
 ## Configuration
 The service uses the `config.yaml` file located in the root directory for configuration.
