@@ -19,7 +19,7 @@ from fileextractlib.VideoProcessor import VideoProcessor
 from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
 import io
 import dto.mapper as mapper
-
+import config
 from persistence.DbConnector import DbConnector
 from persistence.entities import *
 
@@ -28,8 +28,7 @@ _logger = logging.getLogger(__name__)
 
 class DocProcAiService:
     def __init__(self):
-        # TODO: Make db connection configurable
-        self.database = DbConnector("user=root password=root host=database port=5432 dbname=docprocai_service")
+        self.database = DbConnector(config.current["database"]["connection_string"])
 
         # graphql client for interacting with the media service
         self.__media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
@@ -78,14 +77,16 @@ class DocProcAiService:
                     segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
                     # TODO: Fill placeholder title
                     self.database.insert_document_segment(segment.text, media_record_id, segment.page_number,
-                                                          thumbnail_bytes.getvalue(), "Placeholder Title", segment.embedding)
+                                                          thumbnail_bytes.getvalue(), None, segment.embedding)
 
                 # generate and store a summary of this media record
                 self.__lecture_llm_generator.generate_summary_for_document(document_data)
                 self.database.insert_media_record(media_record_id, document_data.summary)
             elif record_type == "VIDEO":
-                # TODO: make this configurable
-                video_processor = VideoProcessor(segment_image_similarity_threshold=0.9, minimum_segment_length=15)
+                video_processor = VideoProcessor(
+                    segment_image_similarity_threshold=
+                        config.current["video_segmentation"]["segment_image_similarity_threshold"],
+                    minimum_segment_length=config.current["video_segmentation"]["minimum_segment_length"])
                 video_data = video_processor.process(download_url)
                 del video_processor
 
@@ -95,8 +96,14 @@ class DocProcAiService:
                 # generate text embeddings for the segments of the video
                 self.__lecture_video_embedding_generator.generate_embeddings(video_data.segments)
 
-                # generate titles for the video's segments
-                self.__lecture_llm_generator.generate_titles_for_video(video_data)
+                # generate titles for the video's segments if llm features enabled
+                if config.current["llm_generation"]["enabled"]:
+                    self.__lecture_llm_generator.generate_titles_for_video(video_data)
+                else:
+                    # otherwise set empty data/placeholders
+                    video_data.summary = []
+                    for i, segment in enumerate(video_data.segments, start=1):
+                        segment.title = "Section " + str(i)
 
                 for segment in video_data.segments:
                     thumbnail_bytes = io.BytesIO()
@@ -175,8 +182,7 @@ class DocProcAiService:
                                 max_similarity = similarity
                                 max_similarity_segment_id = other_segment.id
 
-                        # TODO: Make this configurable
-                        if max_similarity > 0.75:
+                        if max_similarity > config.current["content_linking"]["linking_image_similarity_threshold"]:
                             # create a link between the two segments
                             # skip if a link between these segments already exists
                             if not self.does_link_between_media_record_segments_exist(segment.id,

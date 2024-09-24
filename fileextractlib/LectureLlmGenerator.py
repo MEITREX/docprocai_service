@@ -3,8 +3,7 @@ from typing import Annotated
 
 import pydantic
 from annotated_types import Len
-import lmformatenforcer
-
+import config
 from fileextractlib.DocumentData import DocumentData
 from fileextractlib.LlamaRunner import LlamaRunner
 from fileextractlib.VideoData import VideoData
@@ -12,9 +11,8 @@ from fileextractlib.VideoData import VideoData
 
 class LectureLlmGenerator:
     def __init__(self):
-        # TODO: Make configurable
-        self.__llama_runner = LlamaRunner("./llm_data/models/Meta-Llama-3.1-8B-Instruct",
-                                          "./llm_data/loras/llama-3-1-8B-instruct-titles")
+        self.__llama_runner = LlamaRunner(config.current["lecture_llm_generator"]["base_model_path"],
+                                          config.current["lecture_llm_generator"]["lora_model_path"])
 
     def generate_titles_for_video(self, video_data: VideoData) -> None:
         """

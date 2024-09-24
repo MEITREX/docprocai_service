@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 
 import psycopg
 from uuid import UUID
@@ -73,7 +74,7 @@ class DbConnector:
                                    """)
 
     def insert_document_segment(self, text: str, media_record_id: UUID, page_index: int,
-                                thumbnail: bytes, title: str, embedding: Tensor) -> None:
+                                thumbnail: bytes, title: Optional[str], embedding: Tensor) -> None:
         self.db_connection.execute(
             query="""
                   INSERT INTO document_segments (text, media_record_id, page, thumbnail, title, embedding) 

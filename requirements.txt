@@ -3,9 +3,9 @@ pytesseract
 transformers
 bitsandbytes
 pydantic
-lm-format-enforcer>=0.10.7
+lm-format-enforcer
 webvtt-py
-numpy>=1.26.4,<2.0.0
+numpy
 openai-whisper
 Pillow
 pdf2image
@@ -23,3 +23,6 @@ requests
 tika
 pypdf
 peft
+pyyaml
+torch
+annotated-types
