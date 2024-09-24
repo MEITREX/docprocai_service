@@ -3,6 +3,12 @@ type Query {
     Performs a semantic search with the specified search query, finding segments of media records which are most
     relevant.
 
+    Returns by default 10 results, or the amount specified by "count".
+
+    Returns only segments from media records not in the blacklist.
+
+    Returns only segments from media records in the whitelist.
+
     ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
     any permissions check and should not be called without any validation of the caller's permissions. ⚠️
     """
@@ -10,6 +16,24 @@ type Query {
         count: Int = 10,
         mediaRecordBlacklist: [UUID!]! = [],
         mediaRecordWhitelist: [UUID!]! = []) : [SemanticSearchResult!]!
+
+    """
+    Performs a semantic search which searches for media record segments which are the most similar to the media record
+    segment with the provided id.
+
+    Returns by default 10 results, or the amount specified by "count".
+
+    Returns only segments from media records not in the blacklist.
+
+    Returns only segments from media records in the whitelist.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getSemanticallySimilarMediaRecordSegments(mediaRecordSegmentId: UUID!,
+        count: Int = 10,
+        mediaRecordBlacklist: [UUID!]! = [],
+        mediaRecordWhitelist: [UUID!]! = []): [SemanticSearchResult!]!
 
     """
     Gets all links between segments of media records of the specified content.

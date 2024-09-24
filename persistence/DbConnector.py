@@ -228,6 +228,7 @@ class DbConnector:
                             NULL::text AS transcript,
                             title,
                             thumbnail,
+                            embedding,
                             embedding <=> %(query_embedding)s AS score
                         FROM document_segments
                         WHERE media_record_id = ANY(%(mediaRecordWhitelist)s) AND NOT media_record_id = ANY(%(mediaRecordBlacklist)s)
@@ -244,6 +245,7 @@ class DbConnector:
                             transcript,
                             title,
                             thumbnail,
+                            embedding,
                             embedding <=> %(query_embedding)s AS score
                         FROM video_segments
                         WHERE media_record_id = ANY(%(mediaRecordWhitelist)s) AND NOT media_record_id = ANY(%(mediaRecordBlacklist)s)
@@ -282,7 +284,8 @@ class DbConnector:
                         NULL::text AS transcript,
                         text,
                         thumbnail,
-                        title
+                        title,
+                        embedding
                     FROM document_segments
                     WHERE media_record_id = ANY(%(mediaRecordIds)s)
                 ),
@@ -297,7 +300,8 @@ class DbConnector:
                         transcript,
                         NULL::text AS text,
                         thumbnail,
-                        title
+                        title,
+                        embedding
                     FROM video_segments
                     WHERE media_record_id = ANY(%(mediaRecordIds)s)
                 ),
@@ -323,7 +327,8 @@ class DbConnector:
                         NULL::text AS screen_text,
                         NULL::text AS transcript,
                         thumbnail,
-                        title
+                        title,
+                        embedding
                     FROM document_segments
                     WHERE id = ANY(%(segmentIds)s)
                 ),
@@ -338,7 +343,8 @@ class DbConnector:
                         screen_text,
                         transcript,
                         thumbnail,
-                        title
+                        title,
+                        embedding
                     FROM video_segments
                     WHERE id = ANY(%(segmentIds)s)
                 ),
@@ -372,13 +378,14 @@ class DbConnector:
     @staticmethod
     def __document_segment_query_result_to_object(query_result) -> DocumentSegmentEntity:
         return DocumentSegmentEntity(query_result["id"], query_result["media_record_id"], query_result["page"],
-                                     query_result["text"], bytes(query_result["thumbnail"]), query_result["title"])
+                                     query_result["text"], bytes(query_result["thumbnail"]), query_result["title"],
+                                     query_result["embedding"])
 
     @staticmethod
     def __video_segment_query_result_to_object(query_result) -> VideoSegmentEntity:
         return VideoSegmentEntity(query_result["id"], query_result["media_record_id"], query_result["start_time"],
                                   query_result["transcript"], query_result["screen_text"],
-                                  bytes(query_result["thumbnail"]), query_result["title"])
+                                  bytes(query_result["thumbnail"]), query_result["title"], query_result["embedding"])
 
     @staticmethod
     def __media_record_segment_link_query_result_to_object(query_result) -> MediaRecordSegmentLinkEntity:

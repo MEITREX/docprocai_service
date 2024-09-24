@@ -280,8 +280,40 @@ class DocProcAiService:
         Performs a semantic search on the specified query text. Returns the specified number of media record segments.
         Adheres to the passed black- & whitelist. Segments of media records whose ID is present in the blacklist OR
         whose ID is NOT present in the whitelist will be excluded from the results.
+
+        :param query_text: String search query using which the semantic search is performed
+        :param count: Number of returned search results
+        :param media_record_blacklist: Blacklist of media record ids whose segments should be excluded from the
+        search results
+        :param media_record_whitelist: Whitelist of media record ids whose segments should be included in the
+        search results
+        :return: List of search results
         """
         query_embedding = self.__sentence_embedding_runner.generate_embeddings([query_text])[0]
+
+        query_result = self.database.get_top_record_segments_by_embedding_distance(query_embedding,
+                                                                                   count,
+                                                                                   media_record_blacklist,
+                                                                                   media_record_whitelist)
+
+        return [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
+
+    def get_semantically_similar_media_record_segments(self, media_record_segment_id: UUID, count: int,
+        media_record_blacklist: list[uuid.UUID], media_record_whitelist: list[uuid.UUID]) \
+            -> list[SemanticSearchResultDto]:
+        """
+        Performs a semantic similarity search where the media record segments are returned which are the most
+        semantically similar to the provided media record segment.
+
+        :param media_record_segment_id: ID of the media record segment for which to search similar segments.
+        :param count: Number of returned search results
+        :param media_record_blacklist: Blacklist of media record ids whose segments should be excluded from the
+        search results
+        :param media_record_whitelist: Whitelist of media record ids whose segments should be included in the
+        search results
+        :return: List of search results
+        """
+        query_embedding = self.database.get_record_segments_by_ids([media_record_segment_id])[0].embedding
 
         query_result = self.database.get_top_record_segments_by_embedding_distance(query_embedding,
                                                                                    count,

@@ -1,5 +1,5 @@
 from uuid import UUID
-
+from torch import Tensor
 
 class MediaRecordEntity:
     def __init__(self, id: UUID, summary: list[str]):
@@ -7,18 +7,20 @@ class MediaRecordEntity:
 
 
 class DocumentSegmentEntity:
-    def __init__(self, id: UUID, media_record_id: UUID, page_index: int, text: str, thumbnail: bytes, title: str):
+    def __init__(self, id: UUID, media_record_id: UUID, page_index: int, text: str, thumbnail: bytes, title: str,
+                 embedding: Tensor):
         self.id = id
         self.media_record_id = media_record_id
         self.page_index = page_index
         self.text = text
         self.thumbnail = thumbnail
         self.title = title
+        self.embedding = embedding
 
 
 class VideoSegmentEntity:
     def __init__(self, id: UUID, media_record_id: UUID, start_time: int, transcript: str,
-                 screen_text: str, thumbnail: bytes, title: str):
+                 screen_text: str, thumbnail: bytes, title: str, embedding: Tensor):
         self.id = id
         self.media_record_id = media_record_id
         self.start_time = start_time
@@ -26,6 +28,7 @@ class VideoSegmentEntity:
         self.screen_text = screen_text
         self.thumbnail = thumbnail
         self.title = title
+        self.embedding = embedding
 
 
 class MediaRecordSegmentLinkEntity:
