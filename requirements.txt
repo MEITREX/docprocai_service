@@ -5,7 +5,7 @@ bitsandbytes
 pydantic
 lm-format-enforcer
 webvtt-py
-numpy>=1.26.4,<2.0.0
+numpy
 openai-whisper
 Pillow
 pdf2image
@@ -22,3 +22,7 @@ opencv-python
 requests
 tika
 pypdf
+peft
+pyyaml
+torch
+annotated-types

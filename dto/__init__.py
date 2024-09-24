@@ -10,7 +10,7 @@ class DocumentRecordSegmentDto(TypedDict):
     page: int
     text: str
     thumbnail: str
-    title: NotRequired[str]
+    title: NotRequired[str | None]
 
 
 class VideoRecordSegmentDto(TypedDict):
@@ -20,7 +20,7 @@ class VideoRecordSegmentDto(TypedDict):
     screenText: str
     transcript: str
     thumbnail: str
-    title: NotRequired[str]
+    title: NotRequired[str | None]
 
 
 class SemanticSearchResultDto(TypedDict):

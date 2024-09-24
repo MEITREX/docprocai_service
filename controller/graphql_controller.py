@@ -6,7 +6,6 @@ from fastapi import FastAPI
 
 from service.DocProcAiService import DocProcAiService
 import dto
-import pydantic
 
 from util import does_dict_match_typed_dict
 
@@ -45,8 +44,14 @@ class GraphQLController:
         def semantic_search(parent, info, queryText: str, count: int,
                             mediaRecordBlacklist: list[uuid.UUID], mediaRecordWhitelist: list[uuid.UUID]) \
                 -> list[dto.SemanticSearchResultDto]:
-            # TODO: Implement filtering
             return ai_service.semantic_search(queryText, count, mediaRecordBlacklist, mediaRecordWhitelist)
+
+        @query.field("_internal_noauth_getSemanticallySimilarMediaRecordSegments")
+        def get_semantically_similar_media_record_segments(parent, info, mediaRecordSegmentId: uuid.UUID, count: int,
+                            mediaRecordBlacklist: list[uuid.UUID], mediaRecordWhitelist: list[uuid.UUID]) \
+                -> list[dto.SemanticSearchResultDto]:
+            return ai_service.get_semantically_similar_media_record_segments(mediaRecordSegmentId, count,
+                                                                             mediaRecordBlacklist, mediaRecordWhitelist)
 
         @query.field("_internal_noauth_getMediaRecordLinksForContent")
         def get_media_record_links_for_content(parent, info, contentId: uuid.UUID) \
@@ -58,9 +63,18 @@ class GraphQLController:
                 -> list[dto.VideoRecordSegmentDto | dto.DocumentRecordSegmentDto]:
             return ai_service.get_media_record_segments(mediaRecordId)
 
+        @query.field("_internal_noauth_getMediaRecordSegmentById")
+        def get_media_record_segment_by_id(parent, info, mediaRecordSegmentId: uuid.UUID) \
+                -> dto.VideoRecordSegmentDto | dto.DocumentRecordSegmentDto:
+            return ai_service.get_media_record_segment_by_id(mediaRecordSegmentId)
+
         @query.field("_internal_noauth_getMediaRecordCaptions")
         def get_media_record_captions(parent, info, mediaRecordId: uuid.UUID) -> str | None:
             return ai_service.get_media_record_captions(mediaRecordId)
+
+        @query.field("_internal_noauth_getMediaRecordSummary")
+        def get_media_record_summary(parent, info, mediaRecordId: uuid.UUID) -> list[str]:
+            return ai_service.get_media_record_summary(mediaRecordId)
 
         media_record_segment_interface = bindable(ariadne.InterfaceType("MediaRecordSegment"))
         @media_record_segment_interface.type_resolver

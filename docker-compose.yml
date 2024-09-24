@@ -19,11 +19,20 @@ services:
       dockerfile: Dockerfile
     restart: always
     container_name: docprocai_service
+    volumes:
+      - "./../docprocai_service/llm_data:/app/llm_data"
     ports:
       - "9900:9900"
       - "9901:9901"
     depends_on:
       - database
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
   dapr-docprocai:
     image: "daprio/daprd"
     command: [
@@ -36,9 +45,13 @@ services:
     volumes:
       - "./../docprocai_service/components/:/components" # Mount our components folder for the runtime to use. The mounted location must match the --resources-path argument.
     depends_on:
-      - app-media
+      - app-docprocai
       - redis
     network_mode: "service:app-docprocai"
+  redis:
+    image: "redis:alpine"
+    expose:
+      - "6379"
 volumes:
   dbdata:
 networks:

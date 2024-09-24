@@ -12,5 +12,6 @@ class PageData:
 
 
 class DocumentData:
-    def __init__(self, pages: list[PageData]):
+    def __init__(self, pages: list[PageData], summary: list[str]):
         self.pages = pages
+        self.summary = summary
