@@ -52,6 +52,14 @@ type Query {
     _internal_noauth_getMediaRecordSegments(mediaRecordId: UUID!): [MediaRecordSegment!]!
 
     """
+    Gets the media record segment with the specified ID. Throws error if segment does not exist.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getMediaRecordSegmentById(mediaRecordSegmentId: UUID!): MediaRecordSegment!
+
+    """
     Gets the closed captions of the specified media record if there are any, otherwise returns null.
 
     ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without

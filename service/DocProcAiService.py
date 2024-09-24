@@ -256,6 +256,19 @@ class DocProcAiService:
 
         return [mapper.media_record_segment_entity_to_dto(result) for result in results]
 
+    def get_media_record_segment_by_id(self, media_record_segment_id: uuid.UUID):
+        """
+        Gets the media record segment with the specified id or throws an error if it does not exist.
+        :param media_record_segment_id: ID of the media record segment to return.
+        :return: The media record segment with the specified ID.
+        """
+        query_results = self.database.get_record_segments_by_ids([media_record_segment_id])
+
+        if len(query_results) != 1:
+            raise ValueError("Media record segment with specified ID does not exist.")
+
+        return mapper.media_record_segment_entity_to_dto(query_results[0])
+
     def get_media_record_captions(self, media_record_id: uuid.UUID) -> str | None:
         """
         Returns the captions of the specified media record as a string in WebVTT format if the specified media record
@@ -315,12 +328,17 @@ class DocProcAiService:
         """
         query_embedding = self.database.get_record_segments_by_ids([media_record_segment_id])[0].embedding
 
+        # Fetch one more result than "count", because results will include the segment we're comparing to itself!
         query_result = self.database.get_top_record_segments_by_embedding_distance(query_embedding,
-                                                                                   count,
+                                                                                   count + 1,
                                                                                    media_record_blacklist,
                                                                                    media_record_whitelist)
 
-        return [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
+        results = [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
+
+        # The result which contains the segment we were using as a base itself will have distance 0 to itself (duh)
+        # remove it
+        return [result for result in results if result["score"] > 0]
 
     """
     Helper class used by the internal background task queue of the service.

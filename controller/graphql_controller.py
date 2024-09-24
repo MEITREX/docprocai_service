@@ -63,6 +63,11 @@ class GraphQLController:
                 -> list[dto.VideoRecordSegmentDto | dto.DocumentRecordSegmentDto]:
             return ai_service.get_media_record_segments(mediaRecordId)
 
+        @query.field("_internal_noauth_getMediaRecordSegmentById")
+        def get_media_record_segment_by_id(parent, info, mediaRecordSegmentId: uuid.UUID) \
+                -> dto.VideoRecordSegmentDto | dto.DocumentRecordSegmentDto:
+            return ai_service.get_media_record_segment_by_id(mediaRecordSegmentId)
+
         @query.field("_internal_noauth_getMediaRecordCaptions")
         def get_media_record_captions(parent, info, mediaRecordId: uuid.UUID) -> str | None:
             return ai_service.get_media_record_captions(mediaRecordId)
