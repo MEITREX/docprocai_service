@@ -15,9 +15,10 @@ This service requires pytorch to function. As pytorch GPU-support is required fo
 platform-specific version has to be used.
 By default, pytorch for NVIDIA CUDA 11.8 is used, as this should provide the most capability for widespread GPUs. If you need to use a different version of pytorch, you can change
 the install script located in the `Dockerfile`.
-Note that GPU features require a supported GPU and OS to function, especially in conjunction with Docker, as the service runs in a Docker container.
 
 > [!CAUTION]
+> Note that GPU features require a supported GPU and OS to function, especially in conjunction with Docker, as the service runs in a Docker container.
+> 
 > Docker does not provide GPU-support for MacOS at this point in time, thus GPU-features of the service do not function on MacOS.
 >
 >  GPU features can be disabled using the `config.yaml`.
