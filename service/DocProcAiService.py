@@ -25,7 +25,7 @@ from persistence.entities import *
 _logger = logging.getLogger(__name__)
 
 # only import the llm generator if llm features are enabled in the config
-if config.current["llm_generation"]["enabled"]:
+if config.current["lecture_llm_generator"]["enabled"]:
     from fileextractlib.LectureLlmGenerator import LectureLlmGenerator
 
 class DocProcAiService:
@@ -44,7 +44,7 @@ class DocProcAiService:
         self.__lecture_video_embedding_generator: LectureVideoEmbeddingGenerator = LectureVideoEmbeddingGenerator()
 
         # only create an llm generator object if llm generation is enabled in the config
-        if config.current["llm_generation"]["enabled"]:
+        if config.current["lecture_llm_generator"]["enabled"]:
             self.__lecture_llm_generator: LectureLlmGenerator = LectureLlmGenerator()
 
         self.__background_task_queue: queue.PriorityQueue[DocProcAiService.BackgroundTaskItem] = queue.PriorityQueue()
@@ -101,7 +101,7 @@ class DocProcAiService:
                 self.__lecture_video_embedding_generator.generate_embeddings(video_data.segments)
 
                 # generate titles for the video's segments if llm features enabled
-                if config.current["llm_generation"]["enabled"]:
+                if config.current["lecture_llm_generator"]["enabled"]:
                     self.__lecture_llm_generator.generate_titles_for_video(video_data)
                 else:
                     # otherwise set empty data/placeholders
