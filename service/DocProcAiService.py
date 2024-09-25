@@ -11,7 +11,6 @@ import client.MediaServiceClient as MediaServiceClient
 from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
 from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
-from fileextractlib.LectureLlmGenerator import LectureLlmGenerator
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
 import logging
@@ -25,6 +24,9 @@ from persistence.entities import *
 
 _logger = logging.getLogger(__name__)
 
+# only import the llm generator if llm features are enabled in the config
+if config.current["llm_generation"]["enabled"]:
+    from fileextractlib.LectureLlmGenerator import LectureLlmGenerator
 
 class DocProcAiService:
     def __init__(self):
@@ -41,7 +43,9 @@ class DocProcAiService:
         self.__lecture_pdf_embedding_generator: LectureDocumentEmbeddingGenerator = LectureDocumentEmbeddingGenerator()
         self.__lecture_video_embedding_generator: LectureVideoEmbeddingGenerator = LectureVideoEmbeddingGenerator()
 
-        self.__lecture_llm_generator: LectureLlmGenerator = LectureLlmGenerator()
+        # only create an llm generator object if llm generation is enabled in the config
+        if config.current["llm_generation"]["enabled"]:
+            self.__lecture_llm_generator: LectureLlmGenerator = LectureLlmGenerator()
 
         self.__background_task_queue: queue.PriorityQueue[DocProcAiService.BackgroundTaskItem] = queue.PriorityQueue()
 
