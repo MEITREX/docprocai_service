@@ -10,3 +10,4 @@ venv
 *.ppt
 *.pptx
 __pycache__
+llm_data

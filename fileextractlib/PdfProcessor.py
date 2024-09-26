@@ -1,13 +1,11 @@
-import os
-import urllib.request
-from pdf2image import convert_from_path, convert_from_bytes
-import pytesseract
-from os import path
+import io
+import pdf2image
 import argparse
-import requests
-import logging
-
-_logger = logging.getLogger(__name__)
+import typing
+import tika
+import tika.parser
+from pypdf import PdfWriter, PdfReader
+from fileextractlib.DocumentData import DocumentData, PageData
 
 
 class PdfProcessor:
@@ -15,38 +13,34 @@ class PdfProcessor:
      Can be used to convert documents in pdf format into raw text
     """
 
-    def process_from_path(self, file_name: str) -> list:
-        doc = convert_from_path(file_name)
-        os.environ['OMP_THREAD_LIMIT'] = '20'
+    def __init__(self):
+        tika.initVM()
 
-        pages = []
+    def process_from_io(self, file: typing.BinaryIO) -> DocumentData:
+        # create thumbnail images for each page
+        page_images = pdf2image.convert_from_bytes(file.read())
 
-        for page_number, page_data in enumerate(doc):
-            text = pytesseract.image_to_string(page_data)
-            pages.append({
-                "page_number": page_number,
-                "text": text}
-            )
-        
-        return pages
-    
-    def process_from_url(self, file_url: str) -> list:
-        res = requests.get(file_url)
+        # split the pdf into pages, so we can extract text for each page separately
+        file.seek(0)
+        pdf_reader = PdfReader(file)
 
-        doc = convert_from_bytes(res.content)
-        os.environ['OMP_THREAD_LIMIT'] = '20'
+        # convert each page to text using tika
+        pages: list[PageData] = []
+        for page_index in range(len(pdf_reader.pages)):
+            page_pdf_writer = PdfWriter()
+            page_pdf_writer.add_page(pdf_reader.pages[page_index])
 
-        pages = []
+            with io.BytesIO() as page_pdf_bytes:
+                page_pdf_writer.write(page_pdf_bytes)
+                page_pdf_bytes.seek(0)
+                page_text = tika.parser.from_buffer(page_pdf_bytes)["content"].strip()
 
-        for page_number, page_data in enumerate(doc):
-            text = pytesseract.image_to_string(page_data)
-            pages.append({
-                "page_number": page_number,
-                "text": text}
-            )
-        
-        return pages
+                if page_text == "":
+                    continue
 
+                pages.append(PageData(page_index, page_text, page_images[page_index], None))
+
+        return DocumentData(pages, [])
 
 
 if __name__ == "__main__":
@@ -55,5 +49,6 @@ if __name__ == "__main__":
     parser.add_argument("--file")
     args = parser.parse_args()
     processor = PdfProcessor()
-    result = processor.process(args.file)
-    print(result)
+    with open(args.file, "rb") as f:
+        result = processor.process_from_io(args.file)
+        print(result)

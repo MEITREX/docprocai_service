@@ -2,7 +2,7 @@ import dapr
 from dapr.ext.fastapi.app import DaprApp
 from fastapi import FastAPI
 import uuid
-import service.DocProcAiService as DocProcAiService
+from service.DocProcAiService import DocProcAiService
 
 
 class DaprController:

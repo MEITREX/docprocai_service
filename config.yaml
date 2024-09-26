@@ -1,0 +1,41 @@
+media_service_url: "http://app-media:3001/graphql"
+
+# Settings pertaining to the database connection of the service. Note that the service expects a postgresql database
+# with the pgvector extension installed
+database:
+  # Connection string to the database
+  connection_string: "user=root password=root host=database port=5432 dbname=docprocai_service"
+
+# Settings pertaining to the video segmentation step during the content processing pipeline
+video_segmentation:
+  # The threshold of how similar the current frame of the video has to be compared to the last to be considered
+  # the same. If actual similarity is lower, the video is split into two segments at this position
+  # Default: 0.9
+  # Range: [0, 1]
+  segment_image_similarity_threshold: 0.9
+  # The minimum length a segment has to be in seconds. If the video's screen changes before the minimum segment length
+  # has been reached, the change is ignored
+  minimum_segment_length: 15
+
+# Settings pertaining to the content linking step during the content processing pipeline. Content linking is the process
+# of analyzing all documents and videos of a content object and checking which parts of the documents should be linked,
+# e.g. a timestamp in a lecture recording with the respective page in the lecture's PDF
+content_linking:
+  # This threshold is used for linking videos & documents by image similarity. It is the threshold of how similar the
+  # current frame of the video/page of the document has to be compared to the other one for them to be considered the
+  # same and be linked.
+  # Default: 0.75
+  # Range: [0, 1]
+  linking_image_similarity_threshold: 0.75
+
+# Settings pertaining to the llm generation steps (title generation, summarization) during the content
+# processing pipeline
+lecture_llm_generator:
+  # If true, llm features are enabled in the processing pipeline. If false, these steps are skipped in the pipeline
+  # and relevant data attributes replaced by placeholders or left unset
+  # Default: true
+  enabled: true
+  # path to the folder containing the llm base model which should be used for inference
+  base_model_path: "./llm_data/models/Meta-Llama-3.1-8B-Instruct"
+  # path to the folder containing the llm lora adapter which should be used for inference
+  lora_model_path: "./llm_data/loras/llama-3-1-8B-instruct-titles"

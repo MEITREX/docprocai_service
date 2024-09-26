@@ -3,6 +3,12 @@ type Query {
     Performs a semantic search with the specified search query, finding segments of media records which are most
     relevant.
 
+    Returns by default 10 results, or the amount specified by "count".
+
+    Returns only segments from media records not in the blacklist.
+
+    Returns only segments from media records in the whitelist.
+
     ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
     any permissions check and should not be called without any validation of the caller's permissions. ⚠️
     """
@@ -10,6 +16,24 @@ type Query {
         count: Int = 10,
         mediaRecordBlacklist: [UUID!]! = [],
         mediaRecordWhitelist: [UUID!]! = []) : [SemanticSearchResult!]!
+
+    """
+    Performs a semantic search which searches for media record segments which are the most similar to the media record
+    segment with the provided id.
+
+    Returns by default 10 results, or the amount specified by "count".
+
+    Returns only segments from media records not in the blacklist.
+
+    Returns only segments from media records in the whitelist.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getSemanticallySimilarMediaRecordSegments(mediaRecordSegmentId: UUID!,
+        count: Int = 10,
+        mediaRecordBlacklist: [UUID!]! = [],
+        mediaRecordWhitelist: [UUID!]! = []): [SemanticSearchResult!]!
 
     """
     Gets all links between segments of media records of the specified content.
@@ -28,12 +52,28 @@ type Query {
     _internal_noauth_getMediaRecordSegments(mediaRecordId: UUID!): [MediaRecordSegment!]!
 
     """
+    Gets the media record segment with the specified ID. Throws error if segment does not exist.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getMediaRecordSegmentById(mediaRecordSegmentId: UUID!): MediaRecordSegment!
+
+    """
     Gets the closed captions of the specified media record if there are any, otherwise returns null.
 
     ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
     any permissions check and should not be called without any validation of the caller's permissions. ⚠️
     """
     _internal_noauth_getMediaRecordCaptions(mediaRecordId: UUID!): String
+    """
+    Gets a summary of the specified media record's contents in the form of bullet points. Returns a list of strings
+    where each string is a bullet point of the summary.
+
+    ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
+    any permissions check and should not be called without any validation of the caller's permissions. ⚠️
+    """
+    _internal_noauth_getMediaRecordSummary(mediaRecordId: UUID!): [String!]!
 }
 
 type MediaRecordSegmentLink {
@@ -58,6 +98,14 @@ interface MediaRecordSegment {
     UUID of the media record this segment is part of.
     """
     mediaRecordId: UUID!
+    """
+    Base64-encoded image thumbnail for this segment.
+    """
+    thumbnail: String!
+    """
+    Title of this segment.
+    """
+    title: String
 }
 
 type DocumentRecordSegment implements MediaRecordSegment {
@@ -77,6 +125,14 @@ type DocumentRecordSegment implements MediaRecordSegment {
     The text snippet of the document this search result references.
     """
     text: String!
+    """
+    Base64-encoded image thumbnail for this segment.
+    """
+    thumbnail: String!
+    """
+    Title of this segment.
+    """
+    title: String
 }
 
 type VideoRecordSegment implements MediaRecordSegment {
@@ -100,5 +156,13 @@ type VideoRecordSegment implements MediaRecordSegment {
     Textual transcript of the spoken text during the video snippet this search result references.
     """
     transcript: String!
+    """
+    Base64-encoded image thumbnail for this segment.
+    """
+    thumbnail: String!
+    """
+    Title of this segment.
+    """
+    title: String
 }
 
