@@ -5,6 +5,7 @@ import psycopg
 from uuid import UUID
 
 from pgvector.psycopg import register_vector
+from psycopg.types.enum import register_enum, EnumInfo
 from torch import Tensor
 
 from persistence.entities import *
@@ -23,9 +24,37 @@ class DbConnector:
         register_vector(self.db_connection)
 
         self.db_connection.execute("""
+                                   CREATE TYPE IF NOT EXISTS ingestion_state AS ENUM (
+                                     'ENQUEUED',
+                                     'DONE'
+                                   );
+                                   """)
+        info = EnumInfo.fetch(self.db_connection, "ingestion_state")
+        register_enum(info, self.db_connection, IngestionStateDbType)
+
+        self.db_connection.execute(
+            """
+            CREATE TYPE IF NOT EXISTS ingestion_entity_type AS ENUM (
+              'MEDIA_RECORD',
+              'CONTENT'
+            );
+            """)
+        info = EnumInfo.fetch(self.db_connection, "ingestion_entity_type")
+        register_enum(info, self.db_connection, IngestionEntityTypeDbType)
+
+        self.db_connection.execute("""
+                                   CREATE TABLE IF NOT EXISTS media_record_ingestion_states (
+                                     id uuid PRIMARY KEY,
+                                     entity_type ingestion_entity_type
+                                     state ingestion_state,
+                                   );
+                                   """)
+
+        self.db_connection.execute("""
                                    CREATE TABLE IF NOT EXISTS media_records (
                                      id uuid PRIMARY KEY,
-                                     summary text[]
+                                     summary text[],
+                                     vtt text
                                    );
                                    """)
 
@@ -55,14 +84,6 @@ class DbConnector:
                                      embedding vector(1024)
                                    );
                                    """)
-        # table which contains the caption of full videos in WebVTT format. Primary key is the uuid of the media record
-        # the row stores captions for, and the vtt column stores the WebVTT formatted captions
-        self.db_connection.execute("""
-                                   CREATE TABLE IF NOT EXISTS video_captions (
-                                     media_record_id uuid PRIMARY KEY,
-                                     vtt text
-                                   );
-                                   """)
         # table which contains links between segments of different media records
         # we can't use foreign keys here because the segments live in multiple tables
         self.db_connection.execute("""
@@ -72,6 +93,36 @@ class DbConnector:
                                      segment2_id uuid
                                    );
                                    """)
+
+    def upsert_entity_ingestion_info(self,
+                                     media_record_id: UUID,
+                                     ingestion_entity_type: IngestionEntityTypeDbType,
+                                     ingestion_state: IngestionStateDbType) -> None:
+        self.db_connection.execute(
+            """
+            INSERT INTO media_record_ingestion_states (id, entity_type, state)
+            VALUES (%(id)s, %(entity_type), %(state)s)
+            ON CONFLICT(id)
+            DO UPDATE SET
+              entity_type = EXCLUDED.entity_type
+              state = EXCLUDED.state;
+            """,
+            params={
+                "id": media_record_id,
+                "entity_type": ingestion_entity_type,
+                "state": ingestion_state
+            })
+
+    def get_entity_ingestion_info(self, media_record_id: UUID) \
+            -> tuple[IngestionEntityTypeDbType, IngestionStateDbType]:
+        query_result = self.db_connection.execute(
+            """
+            SELECT state, entity_type
+            FROM media_record_ingestion_states
+            WHERE id = %s
+            """,
+            params=(media_record_id,)).fetchone()
+        return query_result["entity_type"], query_result["state"]
 
     def insert_document_segment(self, text: str, media_record_id: UUID, page_index: int,
                                 thumbnail: bytes, title: Optional[str], embedding: Tensor) -> None:
@@ -115,13 +166,13 @@ class DbConnector:
                   """,
             params=(content_id, segment1_id, segment2_id))
 
-    def insert_media_record(self, id: UUID, summary: list[str]):
+    def insert_media_record(self, id: UUID, summary: list[str], vtt: Optional[str]):
         self.db_connection.execute(
             query="""
-                  INSERT INTO media_records (id, summary)
-                  VALUES (%s, %s)
+                  INSERT INTO media_records (id, summary, vtt)
+                  VALUES (%s, %s, %s)
                   """,
-            params=(id, summary)
+            params=(id, summary, vtt)
         )
 
     def delete_media_record_segment_links_by_segment_ids(self, segment_ids: list[UUID]) -> list[MediaRecordSegmentLinkEntity]:
@@ -169,7 +220,7 @@ class DbConnector:
 
     def get_video_captions_by_media_record_id(self, media_record_id: UUID) -> str | None:
         query_result = self.db_connection.execute(
-            "SELECT vtt FROM video_captions WHERE media_record_id = %s",
+            "SELECT vtt FROM media_records WHERE media_record_id = %s",
             (media_record_id,)).fetchone()
 
         if query_result is None:

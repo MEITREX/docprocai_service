@@ -1,3 +1,4 @@
+from enum import Enum, auto
 from uuid import UUID
 from torch import Tensor
 
@@ -42,3 +43,11 @@ class SemanticSearchResultEntity:
     def __init__(self, score: float, media_record_segment_entity: VideoSegmentEntity | DocumentSegmentEntity):
         self.score = score
         self.media_record_segment_entity = media_record_segment_entity
+
+class IngestionStateDbType(Enum):
+    ENQUEUED = auto()
+    DONE = auto()
+
+class IngestionEntityTypeDbType(Enum):
+    MEDIA_RECORD = auto()
+    CONTENT = auto()

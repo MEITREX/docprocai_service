@@ -87,7 +87,7 @@ class DocProcAiService:
                     # generate and store a summary of this media record
                     self.__lecture_llm_generator.generate_summary_for_document(document_data)
 
-                self.database.insert_media_record(media_record_id, document_data.summary)
+                self.database.insert_media_record(media_record_id, document_data.summary, None)
             elif record_type == "VIDEO":
                 video_processor = VideoProcessor(
                     segment_image_similarity_threshold=
@@ -95,9 +95,6 @@ class DocProcAiService:
                     minimum_segment_length=config.current["video_segmentation"]["minimum_segment_length"])
                 video_data = video_processor.process(download_url)
                 del video_processor
-
-                # store the captions of the video
-                self.database.insert_video_captions(media_record_id, video_data.vtt.content)
 
                 # generate text embeddings for the segments of the video
                 self.__lecture_video_embedding_generator.generate_embeddings(video_data.segments)
@@ -122,7 +119,8 @@ class DocProcAiService:
                     # generate and store a summary of this media record
                     self.__lecture_llm_generator.generate_summary_for_video(video_data)
 
-                self.database.insert_media_record(media_record_id, video_data.summary)
+                # store media record-level data: summary & closed captions vtt string
+                self.database.insert_media_record(media_record_id, video_data.summary, video_data.vtt.content)
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
