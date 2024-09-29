@@ -83,8 +83,10 @@ class DocProcAiService:
                     self.database.insert_document_segment(segment.text, media_record_id, segment.page_number,
                                                           thumbnail_bytes.getvalue(), None, segment.embedding)
 
-                # generate and store a summary of this media record
-                self.__lecture_llm_generator.generate_summary_for_document(document_data)
+                if config.current["lecture_llm_generator"]["enabled"]:
+                    # generate and store a summary of this media record
+                    self.__lecture_llm_generator.generate_summary_for_document(document_data)
+
                 self.database.insert_media_record(media_record_id, document_data.summary)
             elif record_type == "VIDEO":
                 video_processor = VideoProcessor(
@@ -116,8 +118,10 @@ class DocProcAiService:
                                                        segment.start_time, thumbnail_bytes.getvalue(),
                                                        segment.title, segment.embedding)
 
-                # generate and store a summary of this media record
-                self.__lecture_llm_generator.generate_summary_for_video(video_data)
+                if config.current["lecture_llm_generator"]["enabled"]:
+                    # generate and store a summary of this media record
+                    self.__lecture_llm_generator.generate_summary_for_video(video_data)
+
                 self.database.insert_media_record(media_record_id, video_data.summary)
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
