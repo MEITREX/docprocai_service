@@ -315,6 +315,48 @@ class DbConnector:
                 """
         return self.__get_record_segments_with_query(query, {"mediaRecordIds": media_record_ids})
 
+    def get_all_record_segments(self) \
+            -> list[DocumentSegmentEntity | VideoSegmentEntity]:
+        query = """
+                WITH document_results AS (
+                    SELECT
+                        id,
+                        media_record_id,
+                        'document' AS source,
+                        page,
+                        NULL::integer AS start_time,
+                        NULL::text AS screen_text,
+                        NULL::text AS transcript,
+                        text,
+                        thumbnail,
+                        title,
+                        embedding
+                    FROM document_segments
+                ),
+                video_results AS (
+                    SELECT 
+                        id,
+                        media_record_id,
+                        'video' AS source,
+                        NULL::integer AS page,
+                        start_time,
+                        screen_text,
+                        transcript,
+                        NULL::text AS text,
+                        thumbnail,
+                        title,
+                        embedding
+                    FROM video_segments
+                ),
+                results AS (
+                    SELECT * FROM document_results
+                    UNION ALL
+                    SELECT * FROM video_results
+                )
+                SELECT * FROM results
+                """
+        return self.__get_record_segments_with_query(query, {})
+
     def get_record_segments_by_ids(self, segment_ids: list[UUID]) -> list[DocumentSegmentEntity | VideoSegmentEntity]:
         query = """
                 WITH document_results AS (
