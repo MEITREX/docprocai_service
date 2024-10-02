@@ -4,7 +4,6 @@ from bertopic.vectorizers import ClassTfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 
 from persistence.DbConnector import DbConnector
-import dto.mapper as mapper
 from persistence.entities import DocumentSegmentEntity, VideoSegmentEntity
 
 
@@ -40,8 +39,10 @@ class TopicModel:
         topics = model.fit_transform(docs, embeddings)
         print("Finished running model")
 
-        print(model.get_topic_info())
-        print(model.get_topic(0, full=True))
+        model_info = model.get_topic_info()
+        model_info.to_csv('model_info.csv')
+        document_info = model.get_document_info(docs)
+        document_info.to_csv('document_info.csv')
 
         fig = model.visualize_topics()
         fig.write_html("topicmodel.html")
@@ -49,7 +50,31 @@ class TopicModel:
         fig2 = model.visualize_barchart(top_n_topics=50, n_words=100)
         fig2.write_html("barchart.html")
 
-        return topics
+        self.add_tags_to_mediarecords(query_results, model, docs)
+
+    def add_tags_to_mediarecords(self, query_results, model, docs):
+        document_info = model.get_document_info(docs)
+
+        i = 0
+        mediarecords_with_tags = {}
+        while i < len(query_results):
+            mediarecord_id = query_results[i].media_record_id
+
+            if isinstance(query_results[i], DocumentSegmentEntity):
+                if query_results[i].text != document_info['Document'].iat[i]:
+                    continue
+
+            elif isinstance(query_results[i], DocumentSegmentEntity):
+                if query_results[i].transcript != document_info['Document'].iat[i]:
+                    continue
+
+            tags = set()
+            if mediarecords_with_tags.get(mediarecord_id) is not None:
+                tags = mediarecords_with_tags.get(mediarecord_id)
+            tags.update(set(document_info['Representation'].iat[i]))
+
+            mediarecords_with_tags.update({mediarecord_id: tags})
+            i += 1
 
 
 if __name__ == "__main__":
