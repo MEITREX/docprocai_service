@@ -25,7 +25,8 @@ class DbConnector:
         self.db_connection.execute("""
                                    CREATE TABLE IF NOT EXISTS media_records (
                                      id uuid PRIMARY KEY,
-                                     summary text[]
+                                     summary text[],
+                                     tags text[]
                                    );
                                    """)
 
@@ -123,6 +124,15 @@ class DbConnector:
                   """,
             params=(id, summary)
         )
+
+    def update_media_record_tags(self, id: UUID, tags: list[str]):
+        self.db_connection.execute(
+            """
+                UPDATE media_records
+                SET tags = (%(tags)s)
+                WHERE id = (%(id)s)
+            """,
+            {'tags': tags, 'id': id})
 
     def delete_media_record_segment_links_by_segment_ids(self, segment_ids: list[UUID]) -> list[MediaRecordSegmentLinkEntity]:
         query_result = self.db_connection.execute(
@@ -314,6 +324,13 @@ class DbConnector:
                 SELECT * FROM results
                 """
         return self.__get_record_segments_with_query(query, {"mediaRecordIds": media_record_ids})
+
+    def get_all_media_records(self):
+        cursor = self.db_connection.cursor()
+        cursor.execute(
+            "SELECT * FROM media_records"
+        )
+        return cursor.fetchall()
 
     def get_all_record_segments(self) \
             -> list[DocumentSegmentEntity | VideoSegmentEntity]:

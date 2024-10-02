@@ -1,9 +1,11 @@
 from uuid import UUID
 from torch import Tensor
 
+
 class MediaRecordEntity:
-    def __init__(self, id: UUID, summary: list[str]):
+    def __init__(self, id: UUID, summary: list[str], tags: set):
         self.summary = summary
+        self.tags = tags
 
 
 class DocumentSegmentEntity:
