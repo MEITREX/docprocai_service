@@ -24,6 +24,5 @@ class DaprController:
         @dapr_app.subscribe(pubsub="meitrex", topic="content-media-record-links-set")
         def content_media_record_links_set_handler(data: dict):
             content_id = uuid.UUID(data["data"]["contentId"])
-            media_record_ids: list[uuid.UUID] = [uuid.UUID(id) for id in data["data"]["mediaRecordIds"]]
 
-            ai_service.enqueue_generate_content_media_record_links(content_id, media_record_ids)
+            ai_service.enqueue_generate_content_media_record_links(content_id)

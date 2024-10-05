@@ -1,12 +1,9 @@
-import json
 from typing import Optional
 
 import psycopg
-from uuid import UUID
 
 from pgvector.psycopg import register_vector
 from psycopg.types.enum import register_enum, EnumInfo
-from torch import Tensor
 
 from persistence.entities import *
 
@@ -23,21 +20,31 @@ class DbConnector:
         self.db_connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
         register_vector(self.db_connection)
 
-        self.db_connection.execute("""
-                                   CREATE TYPE IF NOT EXISTS ingestion_state AS ENUM (
-                                     'ENQUEUED',
-                                     'DONE'
-                                   );
-                                   """)
+        self.db_connection.execute(
+            """
+            DO $$ BEGIN
+                CREATE TYPE ingestion_state AS ENUM (
+                  'ENQUEUED',
+                  'PROCESSING',
+                  'DONE'
+                );
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$;
+            """)
         info = EnumInfo.fetch(self.db_connection, "ingestion_state")
         register_enum(info, self.db_connection, IngestionStateDbType)
 
         self.db_connection.execute(
             """
-            CREATE TYPE IF NOT EXISTS ingestion_entity_type AS ENUM (
-              'MEDIA_RECORD',
-              'CONTENT'
-            );
+            DO $$ BEGIN
+                CREATE TYPE ingestion_entity_type AS ENUM (
+                  'MEDIA_RECORD',
+                  'CONTENT'
+                );
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$;
             """)
         info = EnumInfo.fetch(self.db_connection, "ingestion_entity_type")
         register_enum(info, self.db_connection, IngestionEntityTypeDbType)
@@ -45,8 +52,8 @@ class DbConnector:
         self.db_connection.execute("""
                                    CREATE TABLE IF NOT EXISTS media_record_ingestion_states (
                                      id uuid PRIMARY KEY,
-                                     entity_type ingestion_entity_type
-                                     state ingestion_state,
+                                     entity_type ingestion_entity_type,
+                                     state ingestion_state
                                    );
                                    """)
 
@@ -95,34 +102,53 @@ class DbConnector:
                                    """)
 
     def upsert_entity_ingestion_info(self,
-                                     media_record_id: UUID,
+                                     entity_id: UUID,
                                      ingestion_entity_type: IngestionEntityTypeDbType,
                                      ingestion_state: IngestionStateDbType) -> None:
         self.db_connection.execute(
             """
             INSERT INTO media_record_ingestion_states (id, entity_type, state)
-            VALUES (%(id)s, %(entity_type), %(state)s)
+            VALUES (%(id)s, %(entity_type)s, %(state)s)
             ON CONFLICT(id)
             DO UPDATE SET
-              entity_type = EXCLUDED.entity_type
+              entity_type = EXCLUDED.entity_type,
               state = EXCLUDED.state;
             """,
             params={
-                "id": media_record_id,
+                "id": entity_id,
                 "entity_type": ingestion_entity_type,
                 "state": ingestion_state
             })
 
-    def get_entity_ingestion_info(self, media_record_id: UUID) \
-            -> tuple[IngestionEntityTypeDbType, IngestionStateDbType]:
-        query_result = self.db_connection.execute(
+    def get_entities_ingestion_info(self, entity_ids: list[UUID]) -> list[EntityIngestionInfoEntity]:
+        """
+        Returns the ingestion states stored in the DB for the entities with the given IDs. Returned entity list may
+        not be in the same order as the passed IDs. If no entity exists in the DB with the given ID, it is excluded
+        from the returned list.
+        """
+        query_results = self.db_connection.execute(
             """
-            SELECT state, entity_type
+            SELECT id, state, entity_type
             FROM media_record_ingestion_states
-            WHERE id = %s
+            WHERE id = ANY(%s);
             """,
-            params=(media_record_id,)).fetchone()
-        return query_result["entity_type"], query_result["state"]
+            params=(entity_ids,)).fetchall()
+
+        return [EntityIngestionInfoEntity(
+            entity_id=result["id"],
+            entity_type=result["entity_type"],
+            ingestion_state=result["state"]
+        ) for result in query_results]
+
+    def get_enqueued_or_processing_ingestion_entities(self) \
+            -> list[tuple[UUID, IngestionEntityTypeDbType, IngestionStateDbType]]:
+        query_results = self.db_connection.execute(
+            """
+            SELECT id, state, entity_type
+            FROM media_record_ingestion_states
+            WHERE state IN ('ENQUEUED', 'PROCESSING');
+            """).fetchall()
+        return [(x["id"], x["entity_type"], x["state"]) for x in query_results]
 
     def insert_document_segment(self, text: str, media_record_id: UUID, page_index: int,
                                 thumbnail: bytes, title: Optional[str], embedding: Tensor) -> None:
@@ -150,14 +176,6 @@ class DbConnector:
                   """,
             params=(screen_text, transcript, media_record_id, start_time, thumbnail, title, embedding))
 
-    def insert_video_captions(self, media_record_id: UUID, vtt: str) -> None:
-        self.db_connection.execute(
-            query="""
-                  INSERT INTO video_captions (media_record_id, vtt)
-                  VALUES (%s, %s)
-                  """,
-            params=(media_record_id, vtt))
-
     def insert_media_record_segment_link(self, content_id: UUID, segment1_id: UUID, segment2_id: UUID) -> None:
         self.db_connection.execute(
             query="""
@@ -166,11 +184,15 @@ class DbConnector:
                   """,
             params=(content_id, segment1_id, segment2_id))
 
-    def insert_media_record(self, id: UUID, summary: list[str], vtt: Optional[str]):
+    def upsert_media_record(self, id: UUID, summary: list[str], vtt: Optional[str]):
         self.db_connection.execute(
             query="""
                   INSERT INTO media_records (id, summary, vtt)
                   VALUES (%s, %s, %s)
+                  ON CONFLICT (id)
+                  DO UPDATE SET
+                      summary = EXCLUDED.summary,
+                      vtt = EXCLUDED.vtt;
                   """,
             params=(id, summary, vtt)
         )
@@ -184,6 +206,16 @@ class DbConnector:
                   """,
             {"segment_ids": segment_ids}).fetchall()
 
+        return [DbConnector.__media_record_segment_link_query_result_to_object(x) for x in query_result]
+
+    def delete_media_record_segment_links_by_content_ids(self, content_ids: list[UUID]) \
+            -> list[MediaRecordSegmentLinkEntity]:
+        query_result = self.db_connection.execute(
+            """
+            DELETE FROM media_record_links
+            WHERE content_id = ANY(%(content_ids)s)
+            RETURNING *;
+            """, {"content_ids": content_ids}).fetchall()
         return [DbConnector.__media_record_segment_link_query_result_to_object(x) for x in query_result]
 
     def delete_document_segments_by_media_record_id(self, media_record_ids: list[UUID]) -> list[DocumentSegmentEntity]:

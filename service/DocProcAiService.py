@@ -1,14 +1,18 @@
 import asyncio
 import itertools
+from time import sleep
 
 import PIL.Image
+from sympy import content
+
+import dto
 import fileextractlib.LlamaRunner as LlamaRunner
 import threading
-import queue
-from typing import Callable, Self, Awaitable
+from typing import Callable, Self, Awaitable, Optional
 import uuid
 import client.MediaServiceClient as MediaServiceClient
-from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto
+from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto, \
+    AiEntityProcessingProgressDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
 from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
@@ -21,6 +25,7 @@ import dto.mapper as mapper
 import config
 from persistence.DbConnector import DbConnector
 from persistence.entities import *
+from utils.SortedPriorityQueue import SortedPriorityQueue
 
 _logger = logging.getLogger(__name__)
 
@@ -47,18 +52,19 @@ class DocProcAiService:
         if config.current["lecture_llm_generator"]["enabled"]:
             self.__lecture_llm_generator: LectureLlmGenerator = LectureLlmGenerator()
 
-        self.__background_task_queue: queue.PriorityQueue[DocProcAiService.BackgroundTaskItem] = queue.PriorityQueue()
+        # the "queue" we use to keep track of which items
+        self._background_task_queue: SortedPriorityQueue[DocProcAiService.BackgroundTaskItem] = SortedPriorityQueue()
 
-        self.__keep_background_task_thread_alive: threading.Event = threading.Event()
-        self.__keep_background_task_thread_alive.set()
+        self._keep_background_task_thread_alive: threading.Event = threading.Event()
+        self._keep_background_task_thread_alive.set()
 
         self.__background_task_thread: threading.Thread = threading.Thread(
             target=_background_task_runner,
-            args=[self.__background_task_queue, self.__keep_background_task_thread_alive])
+            args=[self])
         self.__background_task_thread.start()
 
     def __del__(self):
-        self.__keep_background_task_thread_alive = False
+        self._keep_background_task_thread_alive = False
 
     def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
         """
@@ -71,6 +77,12 @@ class DocProcAiService:
             record_type: str = media_record["type"]
 
             _logger.info("Ingesting media record with download URL: " + download_url)
+            self.database.upsert_entity_ingestion_info(media_record_id,
+                                                       IngestionEntityTypeDbType.MEDIA_RECORD,
+                                                       IngestionStateDbType.PROCESSING)
+
+            self.database.delete_document_segments_by_media_record_id([media_record_id])
+            self.database.delete_video_segments_by_media_record_id([media_record_id])
 
             if record_type == "PRESENTATION" or record_type == "DOCUMENT":
                 document_processor = DocumentProcessor()
@@ -87,7 +99,7 @@ class DocProcAiService:
                     # generate and store a summary of this media record
                     self.__lecture_llm_generator.generate_summary_for_document(document_data)
 
-                self.database.insert_media_record(media_record_id, document_data.summary, None)
+                self.database.upsert_media_record(media_record_id, document_data.summary, None)
             elif record_type == "VIDEO":
                 video_processor = VideoProcessor(
                     segment_image_similarity_threshold=
@@ -120,22 +132,39 @@ class DocProcAiService:
                     self.__lecture_llm_generator.generate_summary_for_video(video_data)
 
                 # store media record-level data: summary & closed captions vtt string
-                self.database.insert_media_record(media_record_id, video_data.summary, video_data.vtt.content)
+                self.database.upsert_media_record(media_record_id, video_data.summary, video_data.vtt.content)
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
+
+            self.database.upsert_entity_ingestion_info(media_record_id,
+                                                       IngestionEntityTypeDbType.MEDIA_RECORD,
+                                                       IngestionStateDbType.DONE)
 
             _logger.info("Finished ingesting media record with download URL: " + download_url)
 
         priority = 0
-        self.__background_task_queue.put(DocProcAiService.BackgroundTaskItem(ingest_media_record_task, priority))
+        self.database.upsert_entity_ingestion_info(media_record_id,
+                                                   IngestionEntityTypeDbType.MEDIA_RECORD,
+                                                   IngestionStateDbType.ENQUEUED)
+        self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(media_record_id,
+                                                                            ingest_media_record_task,
+                                                                            priority))
 
-    def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID, media_record_ids: list[uuid.UUID]):
+    def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID):
         """
         Enqueues a task to generate media record links for a content with the given ID, which will be executed in the
         background.
         """
-        def generate_content_media_record_links_task():
-            _logger.debug("Generating content media record links for content " + str(content_id) + "...")
+        async def generate_content_media_record_links_task():
+            _logger.info("Generating content media record links for content " + str(content_id) + "...")
+            self.database.upsert_entity_ingestion_info(content_id,
+                                                       IngestionEntityTypeDbType.CONTENT,
+                                                       IngestionStateDbType.PROCESSING)
+
+            self.database.delete_media_record_segment_links_by_content_ids([content_id])
+
+            # get the ids of the media records which are part of this content
+            media_record_ids = await self.__media_service_client.get_media_record_ids_of_content(content_id)
 
             # we could first run a query to check if any records even match, but considering that linking usually only
             # happens after ingestion, we can assume that the records exist, so that would be an unnecessary query
@@ -192,21 +221,25 @@ class DocProcAiService:
                             # create a link between the two segments
                             # skip if a link between these segments already exists
                             if not self.does_link_between_media_record_segments_exist(segment.id,
-                                                                                      max_similarity_segment_id):
+                                                                                      max_similarity_segment_id,
+                                                                                      content_id):
                                 self.database.insert_media_record_segment_link(content_id,
                                                                                segment.id,
                                                                                max_similarity_segment_id)
 
-            _logger.debug("Generated content media record links for content " + str(content_id) + ".")
+            self.database.upsert_entity_ingestion_info(content_id,
+                                                       IngestionEntityTypeDbType.CONTENT,
+                                                       IngestionStateDbType.DONE)
+            _logger.info("Generated content media record links for content " + str(content_id) + ".")
 
         # priority of media record link generation needs to be higher than that of media record ingestion (higher
         # priority items are processed last), so that the media records which are being linked have been processed
         # before being linked
-        priority = 1
-        generate_content_media_record_links_task()
-        # TODO: this should be executed as a task, probably
-        #self._background_task_queue.put(
-        #    DocProcAiService.BackgroundTaskItem(generate_content_media_record_links_task, priority))
+        self.database.upsert_entity_ingestion_info(content_id,
+                                                   IngestionEntityTypeDbType.CONTENT,
+                                                   IngestionStateDbType.ENQUEUED)
+        self._background_task_queue.put(
+            DocProcAiService.BackgroundTaskItem(content_id, generate_content_media_record_links_task, priority=1))
 
     def create_link_between_media_record_segments(self,
                                                   content_id: uuid.UUID,
@@ -218,11 +251,14 @@ class DocProcAiService:
         """
         self.database.insert_media_record_segment_link(content_id, segment_id, other_segment_id)
 
-    def does_link_between_media_record_segments_exist(self, segment_id: uuid.UUID, other_segment_id: uuid.UUID) -> bool:
+    def does_link_between_media_record_segments_exist(self,
+                                                      segment_id: uuid.UUID,
+                                                      other_segment_id: uuid.UUID,
+                                                      content_id: uuid.UUID) -> bool:
         """
         Checks if a link between two media record segments exists by their IDs.
         """
-        return self.database.does_segment_link_exist(segment_id, other_segment_id)
+        return self.database.does_segment_link_exist(segment_id, other_segment_id, content_id)
 
     def delete_entries_of_media_record(self, media_record_id: uuid.UUID):
         """
@@ -296,6 +332,53 @@ class DocProcAiService:
         """
         return self.database.get_media_record_summary_by_media_record_id(media_record_id)
 
+    def get_entities_ai_processing_state(self, entity_ids: list[uuid.UUID]) -> list[AiEntityProcessingProgressDto]:
+        """
+        For the entities with the specified IDs, gets their AI processing progress and returns a list containing their
+        progress in the order of the passed entity ids.
+        :param entity_ids: The IDs of the entities to get processing progress for.
+        :return: List containing processing progress for the specified entities in the same order.
+        """
+        query_results: list[EntityIngestionInfoEntity] = self.database.get_entities_ingestion_info(entity_ids)
+
+        results: list[AiEntityProcessingProgressDto] = []
+
+        for entity_id in entity_ids:
+            query_result: Optional[EntityIngestionInfoEntity] \
+                = next((x for x in query_results if x.entity_id == entity_id), None)
+
+            if query_result is None:
+                results.append({
+                    "entityId": entity_id,
+                    "state": dto.AiEntityProcessingStateDto.UNKNOWN,
+                    "queuePosition": None
+                })
+
+            match query_result.ingestion_state:
+                case IngestionStateDbType.PROCESSING:
+                    state = dto.AiEntityProcessingStateDto.PROCESSING
+                case IngestionStateDbType.ENQUEUED:
+                    state = dto.AiEntityProcessingStateDto.ENQUEUED
+                case IngestionStateDbType.DONE:
+                    state = dto.AiEntityProcessingStateDto.DONE
+                case _:
+                    state = dto.AiEntityProcessingStateDto.UNKNOWN
+
+            try:
+                queue_position = self._background_task_queue.first_index_satisfying_predicate(
+                    lambda x: x.entity_id == entity_id)
+            except ValueError:
+                # raised when element not in queue
+                queue_position = None
+
+            results.append({
+                "entityId": entity_id,
+                "state": state,
+                "queuePosition": queue_position
+            })
+
+        return results
+
     def semantic_search(self,
                         query_text: str,
                         count: int,
@@ -352,26 +435,57 @@ class DocProcAiService:
         # remove it
         return [result for result in results if result["score"] > 0]
 
+    def _ensure_processing_queue_in_consistent_state(self) -> None:
+        """
+        Helper method to ensure that the processing queue is in a consistent state.
+
+        WARNING: Should only be executed when no item is currently being processed (items being in the queue is fine).
+        """
+        entities_in_queue = self.database.get_enqueued_or_processing_ingestion_entities()
+
+        def enqueue_entity(entity_id: UUID, entity_type: IngestionEntityTypeDbType):
+            if entity_type == IngestionEntityTypeDbType.CONTENT:
+                self.enqueue_generate_content_media_record_links(entity_id)
+            elif entity_type == IngestionEntityTypeDbType.MEDIA_RECORD:
+                self.enqueue_ingest_media_record_task(entity_id)
+
+        for (entity_id, entity_type, entity_state) in entities_in_queue:
+            if entity_state == IngestionStateDbType.PROCESSING:
+                # No item should currently be in processing, so this is a wrong state
+                # Enqueue it again so it gets processed
+                self.database.upsert_entity_ingestion_info(entity_id, entity_type, IngestionStateDbType.ENQUEUED)
+                enqueue_entity(entity_id, entity_type)
+            elif entity_state == IngestionStateDbType.ENQUEUED:
+                # Ensure that entities which are listed as enqueued are actually in the processing queue
+                # if not, add them
+                try:
+                    self._background_task_queue.first_index_satisfying_predicate(lambda x: x.entity_id == entity_id)
+                except ValueError:
+                    # A value error is raised when the item could not be found in the queue, re-queue it in that case
+                    enqueue_entity(entity_id, entity_type)
+
     """
     Helper class used by the internal background task queue of the service.
     """
     class BackgroundTaskItem:
-        def __init__(self, task: Callable[[], Awaitable[None]], priority: int):
+        def __init__(self, entity_id: UUID, task: Callable[[], Awaitable[None]], priority: int):
+            self.entity_id = entity_id
             self.task: Callable[[], Awaitable[None]] = task
             self.priority: int = priority
 
         def __lt__(self, other: Self):
             return self.priority < other.priority
 
-def _background_task_runner(task_queue: queue.PriorityQueue[DocProcAiService.BackgroundTaskItem],
-                            keep_alive: threading.Event):
+def _background_task_runner(service: DocProcAiService):
     """
     Runner function which executes tasks from the task queue in the background.
     """
-    while keep_alive.is_set():
-        try:
-            background_task_item = task_queue.get(block=True, timeout=1)
-        except queue.Empty:
+    while service._keep_background_task_thread_alive.is_set():
+        service._ensure_processing_queue_in_consistent_state()
+
+        if len(service._background_task_queue) == 0:
+            sleep(1)
             continue
+
+        background_task_item = service._background_task_queue.get()
         asyncio.run(background_task_item.task())
-        task_queue.task_done()
