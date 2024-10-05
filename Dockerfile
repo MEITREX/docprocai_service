@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Install torch manually, it needs a special version which supports our CUDA version. Install this AFTER the
 # requirements, as some of the requirements might install torch as well, but we want to install the correct version
-RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
 # copy the current directory contents into the container at /app
 COPY . .
