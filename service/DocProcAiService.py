@@ -1,5 +1,6 @@
 import asyncio
 import itertools
+import time
 from time import sleep
 
 import PIL.Image
@@ -26,12 +27,14 @@ import config
 from persistence.DbConnector import DbConnector
 from persistence.entities import *
 from utils.SortedPriorityQueue import SortedPriorityQueue
+import threading
 
 _logger = logging.getLogger(__name__)
 
 # only import the llm generator if llm features are enabled in the config
 if config.current["lecture_llm_generator"]["enabled"]:
     from fileextractlib.LectureLlmGenerator import LectureLlmGenerator
+
 
 class DocProcAiService:
     def __init__(self):
@@ -48,7 +51,7 @@ class DocProcAiService:
         self.__lecture_pdf_embedding_generator: LectureDocumentEmbeddingGenerator = LectureDocumentEmbeddingGenerator()
         self.__lecture_video_embedding_generator: LectureVideoEmbeddingGenerator = LectureVideoEmbeddingGenerator()
 
-        # only create an llm generator object if llm generation is enabled in the config
+        # only create a llm generator object if llm generation is enabled in the config
         if config.current["lecture_llm_generator"]["enabled"]:
             self.__lecture_llm_generator: LectureLlmGenerator = LectureLlmGenerator()
 
@@ -59,8 +62,8 @@ class DocProcAiService:
         self._keep_background_task_thread_alive.set()
 
         self.__background_task_thread: threading.Thread = threading.Thread(
-            target=_background_task_runner,
-            args=[self])
+            target=self._background_task_runner,
+            args=[])
         self.__background_task_thread.start()
 
     def __del__(self):
@@ -70,6 +73,7 @@ class DocProcAiService:
         """
         Enqueues a task to ingest a media record with the given ID, which will be executed in the background.
         """
+
         async def ingest_media_record_task():
             media_record = await self.__media_service_client.get_media_record_type_and_download_url(media_record_id)
             download_url = media_record["internalDownloadUrl"]
@@ -103,7 +107,7 @@ class DocProcAiService:
             elif record_type == "VIDEO":
                 video_processor = VideoProcessor(
                     segment_image_similarity_threshold=
-                        config.current["video_segmentation"]["segment_image_similarity_threshold"],
+                    config.current["video_segmentation"]["segment_image_similarity_threshold"],
                     minimum_segment_length=config.current["video_segmentation"]["minimum_segment_length"])
                 video_data = video_processor.process(download_url)
                 del video_processor
@@ -155,11 +159,17 @@ class DocProcAiService:
         Enqueues a task to generate media record links for a content with the given ID, which will be executed in the
         background.
         """
-        async def generate_content_media_record_links_task():
+
+        async def generate_content_media_record_links_task() -> None:
+            """
+            Function which performs the media record linking. Executed as a task asynchronously.
+            """
             _logger.info("Generating content media record links for content " + str(content_id) + "...")
             self.database.upsert_entity_ingestion_info(content_id,
                                                        IngestionEntityTypeDbType.CONTENT,
                                                        IngestionStateDbType.PROCESSING)
+
+            start_time = time.time()
 
             self.database.delete_media_record_segment_links_by_content_ids([content_id])
 
@@ -177,60 +187,33 @@ class DocProcAiService:
 
             # now we can check for links
             # go through each media record's segments
+            linking_results: dict[UUID, UUID] = {}
+            threads: list[threading.Thread] = []
             for media_record_id, segments in reversed(media_records_segments.items()):
                 for segment in segments:
-                    # get the text of the segment
-                    segment_thumbnail = PIL.Image.open(io.BytesIO(segment.thumbnail))
+                    threads.append(
+                        threading.Thread(target=DocProcAiService.__match_segment_against_other_media_records,
+                                         args=(linking_results, media_record_id, segment, media_records_segments)))
 
-                    # TODO: Only crop if video
-                    cropped_segment_thumbnail = segment_thumbnail.crop((
-                        segment_thumbnail.width * 1/6, segment_thumbnail.height * 1/10,
-                        segment_thumbnail.width * 5/6, segment_thumbnail.height * 9/10))
+            for thread in threads:
+                thread.start()
 
-                    image_template_matcher = ImageTemplateMatcher(
-                        template=cropped_segment_thumbnail,
-                        scaling_factor=0.4,
-                        enable_multi_scale_matching=True,
-                        multi_scale_matching_steps=40
-                    )
+            for thread in threads:
+                thread.join()
 
-                    # go through each other media record's segments
-                    for other_media_record_id, other_segments in media_records_segments.items():
-                        # skip if the other media record is the same as the current one
-                        if other_media_record_id == media_record_id:
-                            continue
-
-                        # find the segment with the highest similarity
-                        max_similarity = 0
-                        max_similarity_segment_id = None
-                        for other_segment in other_segments:
-                            # resize the other segment's thumbnail, so it's the same size as the template thumbnail
-                            other_segment_thumbnail = PIL.Image.open(io.BytesIO(other_segment.thumbnail))
-                            size_ratio = segment_thumbnail.height / other_segment_thumbnail.height
-                            other_segment_thumbnail = other_segment_thumbnail.resize(
-                                (int(other_segment_thumbnail.width * size_ratio), segment_thumbnail.height))
-
-                            # use the image template matcher to try to match the thumbnails
-                            # TODO: Only use center portion of image for matching
-                            similarity = image_template_matcher.match(other_segment_thumbnail)
-                            if similarity > max_similarity:
-                                max_similarity = similarity
-                                max_similarity_segment_id = other_segment.id
-
-                        if max_similarity > config.current["content_linking"]["linking_image_similarity_threshold"]:
-                            # create a link between the two segments
-                            # skip if a link between these segments already exists
-                            if not self.does_link_between_media_record_segments_exist(segment.id,
-                                                                                      max_similarity_segment_id,
-                                                                                      content_id):
-                                self.database.insert_media_record_segment_link(content_id,
-                                                                               segment.id,
-                                                                               max_similarity_segment_id)
+            for (segment1_id, segment2_id) in linking_results.items():
+                if not self.does_link_between_media_record_segments_exist(segment1_id,
+                                                                          segment2_id,
+                                                                          content_id):
+                    self.database.insert_media_record_segment_link(content_id,
+                                                                   segment1_id,
+                                                                   segment2_id)
 
             self.database.upsert_entity_ingestion_info(content_id,
                                                        IngestionEntityTypeDbType.CONTENT,
                                                        IngestionStateDbType.DONE)
-            _logger.info("Generated content media record links for content " + str(content_id) + ".")
+            _logger.info("Generated content media record links for content "
+                         + str(content_id) + " in " + str(time.time() - start_time) + " seconds.")
 
         # priority of media record link generation needs to be higher than that of media record ingestion (higher
         # priority items are processed last), so that the media records which are being linked have been processed
@@ -289,11 +272,11 @@ class DocProcAiService:
 
         # go over all links and resolve the referenced segments from entity to dto
         return [{
-                    "segment1": mapper.media_record_segment_entity_to_dto(
-                        next(x for x in result_segments if x.id == segment_link.segment1_id)),
-                    "segment2": mapper.media_record_segment_entity_to_dto(
-                        next(x for x in result_segments if x.id == segment_link.segment2_id))
-                } for segment_link in result_links]
+            "segment1": mapper.media_record_segment_entity_to_dto(
+                next(x for x in result_segments if x.id == segment_link.segment1_id)),
+            "segment2": mapper.media_record_segment_entity_to_dto(
+                next(x for x in result_segments if x.id == segment_link.segment2_id))
+        } for segment_link in result_links]
 
     def get_media_record_segments(self, media_record_id: uuid.UUID) \
             -> list[DocumentRecordSegmentDto | VideoRecordSegmentDto]:
@@ -407,7 +390,8 @@ class DocProcAiService:
         return [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
     def get_semantically_similar_media_record_segments(self, media_record_segment_id: UUID, count: int,
-        media_record_blacklist: list[uuid.UUID], media_record_whitelist: list[uuid.UUID]) \
+                                                       media_record_blacklist: list[uuid.UUID],
+                                                       media_record_whitelist: list[uuid.UUID]) \
             -> list[SemanticSearchResultDto]:
         """
         Performs a semantic similarity search where the media record segments are returned which are the most
@@ -467,6 +451,7 @@ class DocProcAiService:
     """
     Helper class used by the internal background task queue of the service.
     """
+
     class BackgroundTaskItem:
         def __init__(self, entity_id: UUID, task: Callable[[], Awaitable[None]], priority: int):
             self.entity_id = entity_id
@@ -476,16 +461,63 @@ class DocProcAiService:
         def __lt__(self, other: Self):
             return self.priority < other.priority
 
-def _background_task_runner(service: DocProcAiService):
-    """
-    Runner function which executes tasks from the task queue in the background.
-    """
-    while service._keep_background_task_thread_alive.is_set():
-        service._ensure_processing_queue_in_consistent_state()
+    def _background_task_runner(self):
+        """
+        Runner function which executes tasks from the task queue in the background.
+        """
+        while self._keep_background_task_thread_alive.is_set():
+            self._ensure_processing_queue_in_consistent_state()
 
-        if len(service._background_task_queue) == 0:
-            sleep(1)
-            continue
+            if len(self._background_task_queue) == 0:
+                sleep(1)
+                continue
 
-        background_task_item = service._background_task_queue.get()
-        asyncio.run(background_task_item.task())
+            background_task_item = self._background_task_queue.get()
+            asyncio.run(background_task_item.task())
+
+    @staticmethod
+    def __match_segment_against_other_media_records(linking_results: dict[UUID, UUID],
+                                                    media_record_id,
+                                                    segment,
+                                                    media_records_segments) -> None:
+        # get the text of the segment
+        segment_thumbnail = PIL.Image.open(io.BytesIO(segment.thumbnail))
+
+        # TODO: Only crop if video
+        cropped_segment_thumbnail = segment_thumbnail.crop((
+            segment_thumbnail.width * 1 / 6, segment_thumbnail.height * 1 / 10,
+            segment_thumbnail.width * 5 / 6, segment_thumbnail.height * 9 / 10))
+
+        image_template_matcher = ImageTemplateMatcher(
+            template=cropped_segment_thumbnail,
+            scaling_factor=0.4,
+            enable_multi_scale_matching=True,
+            multi_scale_matching_steps=40
+        )
+
+        # go through each other media record's segments
+        for other_media_record_id, other_segments in media_records_segments.items():
+            # skip if the other media record is the same as the current one
+            if other_media_record_id == media_record_id:
+                continue
+
+            # find the segment with the highest similarity
+            max_similarity = 0
+            max_similarity_segment_id = None
+            for other_segment in other_segments:
+                # resize the other segment's thumbnail, so it's the same size as the template thumbnail
+                other_segment_thumbnail = PIL.Image.open(io.BytesIO(other_segment.thumbnail))
+                size_ratio = segment_thumbnail.height / other_segment_thumbnail.height
+                other_segment_thumbnail = other_segment_thumbnail.resize(
+                    (int(other_segment_thumbnail.width * size_ratio), segment_thumbnail.height))
+
+                # use the image template matcher to try to match the thumbnails
+                # TODO: Only use center portion of image for matching
+                similarity = image_template_matcher.match(other_segment_thumbnail)
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    max_similarity_segment_id = other_segment.id
+
+            if max_similarity > config.current["content_linking"]["linking_image_similarity_threshold"]:
+                # add the link we discovered to the results dictionary
+                linking_results[segment.id] = max_similarity_segment_id

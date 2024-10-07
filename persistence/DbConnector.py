@@ -252,7 +252,7 @@ class DbConnector:
 
     def get_video_captions_by_media_record_id(self, media_record_id: UUID) -> str | None:
         query_result = self.db_connection.execute(
-            "SELECT vtt FROM media_records WHERE media_record_id = %s",
+            "SELECT vtt FROM media_records WHERE id = %s",
             (media_record_id,)).fetchone()
 
         if query_result is None:
