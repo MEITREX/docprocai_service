@@ -270,6 +270,16 @@ class DbConnector:
 
         return query_result["vtt"]
 
+    def get_media_record_tags_by_media_record_id(self, media_record_id) -> list[str]:
+        query_result = self.db_connection.execute(
+            "SELECT tags FROM media_records WHERE media_record_id = %s",
+            (media_record_id,)).fetchone()
+
+        if query_result is None:
+            return []
+
+        return query_result["tags"]
+
     def get_segment_links_by_content_id(self, content_id: UUID) -> list[MediaRecordSegmentLinkEntity]:
         result = self.db_connection.execute("""
                     SELECT

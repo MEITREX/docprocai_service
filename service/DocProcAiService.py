@@ -1,33 +1,32 @@
 import asyncio
+import io
 import itertools
+import logging
+import threading
 import time
+import uuid
 from time import sleep
+from typing import Callable, Self, Awaitable, Optional
 
 import PIL.Image
-from sympy import content
 
-import dto
-import fileextractlib.LlamaRunner as LlamaRunner
-import threading
-from typing import Callable, Self, Awaitable, Optional
-import uuid
 import client.MediaServiceClient as MediaServiceClient
+import config
+import dto
+import dto.mapper as mapper
+import fileextractlib.LlamaRunner as LlamaRunner
+from TopicModel import TopicModel
 from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto, \
     AiEntityProcessingProgressDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
+from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
 from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
-import logging
 from fileextractlib.VideoProcessor import VideoProcessor
-from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
-import io
-import dto.mapper as mapper
-import config
 from persistence.DbConnector import DbConnector
 from persistence.entities import *
 from utils.SortedPriorityQueue import SortedPriorityQueue
-import threading
 
 _logger = logging.getLogger(__name__)
 
@@ -146,6 +145,8 @@ class DocProcAiService:
 
             _logger.info("Finished ingesting media record with download URL: " + download_url)
 
+            self.generate_tags_for_media_records()
+
         priority = 0
         self.database.upsert_entity_ingestion_info(media_record_id,
                                                    IngestionEntityTypeDbType.MEDIA_RECORD,
@@ -153,6 +154,20 @@ class DocProcAiService:
         self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(media_record_id,
                                                                             ingest_media_record_task,
                                                                             priority))
+
+    def generate_tags_for_media_records(self):
+        record_segments = self.database.get_all_record_segments()
+        media_records = self.database.get_all_media_records()
+
+        topic_model = TopicModel(record_segments, media_records)
+
+        _logger.info("Running topic model")
+        topic_model.create_topic_model()
+        _logger.info("Finished running topic model")
+        media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
+        for media_record_id, tags in media_records_with_tags.items():
+            self.database.update_media_record_tags(media_record_id, list(tags))
+        _logger.info("Generated tags for media records.")
 
     def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID):
         """
@@ -314,6 +329,16 @@ class DocProcAiService:
         :return: List of strings, where each string is a bullet point of the summary
         """
         return self.database.get_media_record_summary_by_media_record_id(media_record_id)
+
+    def get_tags_for_media_record(self, media_record_id: uuid.UUID) -> list[str]:
+        """
+        Returns the auto generated tags of the specified media record as a list.
+        :param media_record_id: The ID of the media record
+        :return: List containing the tags
+        """
+
+        return self.database.get_media_record_tags_by_media_record_id(media_record_id)
+
 
     def get_entities_ai_processing_state(self, entity_ids: list[uuid.UUID]) -> list[AiEntityProcessingProgressDto]:
         """

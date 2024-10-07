@@ -19,7 +19,7 @@ class TopicModel:
         self.record_segments = record_segments
         self.media_records = media_records
 
-    def createTopicModel(self):
+    def create_topic_model(self):
 
         embeddings = []
 
@@ -43,23 +43,10 @@ class TopicModel:
             ctfidf_model=ctfidf_model,
             representation_model=representational_model
         )
-        print("Running topic model")
-        topics = self.model.fit_transform(self.docs, embeddings)
-        print("Finished running model")
 
-        model_info = self.model.get_topic_info()
-        model_info.to_csv('model_info.csv')
-        document_info = self.model.get_document_info(self.docs)
-        document_info.to_csv('document_info.csv')
+        self.model.fit_transform(self.docs, embeddings)
 
-        fig = self.model.visualize_topics()
-        fig.write_html("topicmodel.html")
-
-        fig2 = self.model.visualize_barchart(top_n_topics=50, n_words=100)
-        fig2.write_html("barchart.html")
-
-
-    def add_tags_to_mediarecords(self, record_segments, media_records):
+    def add_tags_to_media_records(self, record_segments, media_records):
         document_info = self.model.get_document_info(self.docs)
         mediarecords_with_tags = {}
 
@@ -74,7 +61,7 @@ class TopicModel:
                 if record_segments[i].text != document_info['Document'].iat[i]:
                     continue
 
-            elif isinstance(record_segments[i], DocumentSegmentEntity):
+            elif isinstance(record_segments[i], VideoSegmentEntity):
                 if record_segments[i].transcript != document_info['Document'].iat[i]:
                     continue
 
@@ -97,7 +84,7 @@ if __name__ == "__main__":
 
     topic_model = TopicModel(record_segments, media_records)
 
-    topic_model.createTopicModel()
-    mediarecords_with_tags = topic_model.add_tags_to_mediarecords(record_segments, media_records)
-    for mrid, tags in mediarecords_with_tags.items():
+    topic_model.create_topic_model()
+    media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
+    for mrid, tags in media_records_with_tags.items():
         database.update_media_record_tags(mrid, list(tags))
