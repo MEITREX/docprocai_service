@@ -356,8 +356,6 @@ class DocProcAiService:
 
         return self.media_record_info_database.get_media_record_tags_by_media_record_id(media_record_id)
 
-    b
-
     def get_entities_ai_processing_state(self, entity_ids: list[uuid.UUID]) -> list[AiEntityProcessingProgressDto]:
         """
         For the entities with the specified IDs, gets their AI processing progress and returns a list containing their
