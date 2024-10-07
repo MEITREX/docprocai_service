@@ -174,8 +174,8 @@ class DocProcAiService:
 
 
     def generate_tags_for_media_records(self):
-        record_segments = self.database.get_all_record_segments()
-        media_records = self.database.get_all_media_records()
+        record_segments = self.segment_database.get_all_record_segments()
+        media_records = self.media_record_info_database.get_all_media_records()
 
         topic_model = TopicModel(record_segments, media_records)
 
@@ -184,7 +184,7 @@ class DocProcAiService:
         _logger.info("Finished running topic model")
         media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
         for media_record_id, tags in media_records_with_tags.items():
-            self.database.update_media_record_tags(media_record_id, list(tags))
+            self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
         _logger.info("Generated tags for media records.")
 
     def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID):
