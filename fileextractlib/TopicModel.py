@@ -4,7 +4,6 @@ from bertopic.representation import MaximalMarginalRelevance
 from bertopic.vectorizers import ClassTfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 
-from persistence.DbConnector import DbConnector
 from persistence.entities import DocumentSegmentEntity, VideoSegmentEntity
 
 
@@ -74,17 +73,3 @@ class TopicModel:
             i += 1
 
         return mediarecords_with_tags
-
-
-if __name__ == "__main__":
-    database = DbConnector(
-        conn_info="user=root password=root host=localhost port=5431 dbname=docprocai_service")
-    record_segments = database.get_all_record_segments()
-    media_records = database.get_all_media_records()
-
-    topic_model = TopicModel(record_segments, media_records)
-
-    topic_model.create_topic_model()
-    media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
-    for mrid, tags in media_records_with_tags.items():
-        database.update_media_record_tags(mrid, list(tags))

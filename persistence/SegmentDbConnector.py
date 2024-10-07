@@ -276,13 +276,6 @@ class SegmentDbConnector:
                 """
         return self.__get_record_segments_with_query(query, {"mediaRecordIds": media_record_ids})
 
-    def get_all_media_records(self):
-        cursor = self.db_connection.cursor()
-        cursor.execute(
-            "SELECT * FROM media_records"
-        )
-        return cursor.fetchall()
-
     def get_all_record_segments(self) \
             -> list[DocumentSegmentEntity | VideoSegmentEntity]:
         query = """
