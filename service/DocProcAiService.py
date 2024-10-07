@@ -156,13 +156,13 @@ class DocProcAiService:
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
+            self.generate_tags_for_media_records()
+
             self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
                                                                        IngestionEntityTypeDbType.MEDIA_RECORD,
                                                                        IngestionStateDbType.DONE)
 
             _logger.info("Finished ingesting media record with download URL: " + download_url)
-
-            self.generate_tags_for_media_records()
 
         priority = 0
         self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
@@ -357,6 +357,7 @@ class DocProcAiService:
         return self.media_record_info_database.get_media_record_tags_by_media_record_id(media_record_id)
 
     b
+
     def get_entities_ai_processing_state(self, entity_ids: list[uuid.UUID]) -> list[AiEntityProcessingProgressDto]:
         """
         For the entities with the specified IDs, gets their AI processing progress and returns a list containing their
