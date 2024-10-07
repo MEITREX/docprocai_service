@@ -76,13 +76,13 @@ type Query {
     _internal_noauth_getMediaRecordSummary(mediaRecordId: UUID!): [String!]!
 
     """
-    Gets the tags of the specified media record. Returns a list of strings
+    Gets the suggested tags of the specified media record. Returns a list of strings
     where each string is a tag.
 
     ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
     any permissions check and should not be called without any validation of the caller's permissions. ⚠️
     """
-    _internal_noauth_getMediaRecordTags(mediaRecordId: UUID!): [String!]!
+    _internal_noauth_getMediaRecordSuggestedTags(mediaRecordId: UUID!): [String!]!
 
     """
     Gets the DocProcAI ingestion processing state of the specified media records. "UNKNOWN" is returned if the specified
