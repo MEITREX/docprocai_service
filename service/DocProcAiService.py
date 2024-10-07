@@ -145,7 +145,6 @@ class DocProcAiService:
 
             _logger.info("Finished ingesting media record with download URL: " + download_url)
 
-            self.generate_tags_for_media_records()
 
         priority = 0
         self.database.upsert_entity_ingestion_info(media_record_id,
@@ -154,6 +153,7 @@ class DocProcAiService:
         self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(media_record_id,
                                                                             ingest_media_record_task,
                                                                             priority))
+        self.generate_tags_for_media_records()
 
     def generate_tags_for_media_records(self):
         record_segments = self.database.get_all_record_segments()
@@ -330,7 +330,7 @@ class DocProcAiService:
         """
         return self.database.get_media_record_summary_by_media_record_id(media_record_id)
 
-    def get_tags_for_media_record(self, media_record_id: uuid.UUID) -> list[str]:
+    def get_media_record_tags(self, media_record_id: uuid.UUID) -> list[str]:
         """
         Returns the auto generated tags of the specified media record as a list.
         :param media_record_id: The ID of the media record
