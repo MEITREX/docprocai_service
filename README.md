@@ -13,7 +13,7 @@ This service is designed to process and manage uploaded lecture material (video 
 ## Installation
 This service requires pytorch to function. As pytorch GPU-support is required for some features of this service, the pip-distributed version of pytorch cannot be used and instead a
 platform-specific version has to be used.
-By default, pytorch for NVIDIA CUDA 11.8 is used, as this should provide the most capability for widespread GPUs. If you need to use a different version of pytorch, you can change
+By default, pytorch for NVIDIA CUDA 12.4 is used, as this should provide the most capability for widespread GPUs. If you need to use a different version of pytorch, you can change
 the install script located in the `Dockerfile`.
 
 > [!CAUTION]
