@@ -20,7 +20,6 @@ type Mutation {
 
 input GenerateMediaRecordLinksInput {
     contentId: UUID!
-    mediaRecordIds: [UUID!]!
 }
 
 input IngestMediaRecordInput {

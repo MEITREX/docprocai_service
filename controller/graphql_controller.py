@@ -1,9 +1,10 @@
-import uuid
+from uuid import UUID
 
 import ariadne
 import ariadne.asgi
 from fastapi import FastAPI
 
+from dto import AiEntityProcessingProgressDto
 from service.DocProcAiService import DocProcAiService
 import dto
 
@@ -24,57 +25,68 @@ class GraphQLController:
             bindables.append(cls)
             return cls
 
+        bindable(ariadne.EnumType("AiEntityProcessingState", dto.AiEntityProcessingStateDto))
+
         mutation = bindable(ariadne.MutationType())
         @mutation.field("_internal_noauth_ingestMediaRecord")
-        def _internal_noauth_ingest_media_record(parent, info, input) -> uuid.UUID:
-            media_record_id: uuid.UUID = input["id"]
+        def _internal_noauth_ingest_media_record(parent, info, input) -> UUID:
+            media_record_id: UUID = input["id"]
             ai_service.enqueue_ingest_media_record_task(media_record_id)
             return media_record_id
 
         @mutation.field("_internal_noauth_enqueueGenerateMediaRecordLinksForContent")
-        def _internal_noauth_enqueue_generate_media_record_links_for_content(parent, info, input) -> uuid.UUID:
-            content_id: uuid.UUID = input["contentId"]
-            media_record_ids: list[uuid.UUID] = [x for x in input["mediaRecordIds"]]
+        def _internal_noauth_enqueue_generate_media_record_links_for_content(parent, info, input) -> UUID:
+            content_id: UUID = input["contentId"]
 
-            ai_service.enqueue_generate_content_media_record_links(content_id, media_record_ids)
+            ai_service.enqueue_generate_content_media_record_links(content_id)
             return content_id
 
         query = bindable(ariadne.QueryType())
         @query.field("_internal_noauth_semanticSearch")
         def semantic_search(parent, info, queryText: str, count: int,
-                            mediaRecordBlacklist: list[uuid.UUID], mediaRecordWhitelist: list[uuid.UUID]) \
+                            mediaRecordBlacklist: list[UUID], mediaRecordWhitelist: list[UUID]) \
                 -> list[dto.SemanticSearchResultDto]:
             return ai_service.semantic_search(queryText, count, mediaRecordBlacklist, mediaRecordWhitelist)
 
         @query.field("_internal_noauth_getSemanticallySimilarMediaRecordSegments")
-        def get_semantically_similar_media_record_segments(parent, info, mediaRecordSegmentId: uuid.UUID, count: int,
-                            mediaRecordBlacklist: list[uuid.UUID], mediaRecordWhitelist: list[uuid.UUID]) \
+        def get_semantically_similar_media_record_segments(parent, info, mediaRecordSegmentId: UUID, count: int,
+                            mediaRecordBlacklist: list[UUID], mediaRecordWhitelist: list[UUID]) \
                 -> list[dto.SemanticSearchResultDto]:
             return ai_service.get_semantically_similar_media_record_segments(mediaRecordSegmentId, count,
                                                                              mediaRecordBlacklist, mediaRecordWhitelist)
 
         @query.field("_internal_noauth_getMediaRecordLinksForContent")
-        def get_media_record_links_for_content(parent, info, contentId: uuid.UUID) \
+        def get_media_record_links_for_content(parent, info, contentId: UUID) \
                 -> list[dto.MediaRecordSegmentLinkDto]:
             return ai_service.get_media_record_links_for_content(contentId)
 
         @query.field("_internal_noauth_getMediaRecordSegments")
-        def get_media_record_segments(parent, info, mediaRecordId: uuid.UUID) \
+        def get_media_record_segments(parent, info, mediaRecordId: UUID) \
                 -> list[dto.VideoRecordSegmentDto | dto.DocumentRecordSegmentDto]:
             return ai_service.get_media_record_segments(mediaRecordId)
 
         @query.field("_internal_noauth_getMediaRecordSegmentById")
-        def get_media_record_segment_by_id(parent, info, mediaRecordSegmentId: uuid.UUID) \
+        def get_media_record_segment_by_id(parent, info, mediaRecordSegmentId: UUID) \
                 -> dto.VideoRecordSegmentDto | dto.DocumentRecordSegmentDto:
             return ai_service.get_media_record_segment_by_id(mediaRecordSegmentId)
 
         @query.field("_internal_noauth_getMediaRecordCaptions")
-        def get_media_record_captions(parent, info, mediaRecordId: uuid.UUID) -> str | None:
+        def get_media_record_captions(parent, info, mediaRecordId: UUID) -> str | None:
             return ai_service.get_media_record_captions(mediaRecordId)
 
         @query.field("_internal_noauth_getMediaRecordSummary")
-        def get_media_record_summary(parent, info, mediaRecordId: uuid.UUID) -> list[str]:
+        def get_media_record_summary(parent, info, mediaRecordId: UUID) -> list[str]:
             return ai_service.get_media_record_summary(mediaRecordId)
+
+        @query.field("_internal_noauth_getMediaRecordsAiProcessingProgress")
+        def get_media_records_ai_processing_state(parent, info, mediaRecordIds: list[UUID])\
+                -> list[AiEntityProcessingProgressDto]:
+            return ai_service.get_entities_ai_processing_state(mediaRecordIds)
+
+        @query.field("_internal_noauth_getContentsAiProcessingProgress")
+        def get_contents_ai_processing_state(parent, info, contentIds: list[UUID]) \
+                -> list[AiEntityProcessingProgressDto]:
+            return ai_service.get_entities_ai_processing_state(contentIds)
 
         media_record_segment_interface = bindable(ariadne.InterfaceType("MediaRecordSegment"))
         @media_record_segment_interface.type_resolver
@@ -94,7 +106,7 @@ class GraphQLController:
 
         @uuid_scalar.value_parser
         def parse_uuid_value(value):
-            return uuid.UUID(value)
+            return UUID(value)
 
         schema = ariadne.make_executable_schema(schema,
                                                 bindables)
