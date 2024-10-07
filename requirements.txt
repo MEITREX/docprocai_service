@@ -26,3 +26,6 @@ peft
 pyyaml
 torch
 annotated-types
+bertopic
+scikit-learn
+requests

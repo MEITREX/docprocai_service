@@ -18,7 +18,8 @@ class MediaRecordInfoDbConnector:
             CREATE TABLE IF NOT EXISTS media_records (
               id uuid PRIMARY KEY,
               summary text[],
-              vtt text
+              vtt text,
+              tags text[]
             );
             """)
 
@@ -54,3 +55,29 @@ class MediaRecordInfoDbConnector:
             return None
 
         return query_result["vtt"]
+
+    def get_media_record_tags_by_media_record_id(self, media_record_id) -> list[str]:
+        query_result = self.db_connection.execute(
+            "SELECT tags FROM media_records WHERE media_record_id = %s",
+            (media_record_id,)).fetchone()
+
+        if query_result is None:
+            return []
+
+        return query_result["tags"]
+
+    def get_all_media_records(self):
+        cursor = self.db_connection.cursor()
+        cursor.execute(
+            "SELECT * FROM media_records"
+        )
+        return cursor.fetchall()
+
+    def update_media_record_tags(self, id: UUID, tags: list[str]):
+        self.db_connection.execute(
+            """
+                UPDATE media_records
+                SET tags = (%(tags)s)
+                WHERE id = (%(id)s)
+            """,
+            {'tags': tags, 'id': id})

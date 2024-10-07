@@ -1,34 +1,35 @@
 import asyncio
+import io
 import itertools
+import logging
+import threading
 import time
+import uuid
 from time import sleep
+from typing import Callable, Self, Awaitable, Optional
 
 import PIL.Image
 import psycopg
 
-import dto
-import fileextractlib.LlamaRunner as LlamaRunner
-from typing import Callable, Self, Awaitable, Optional
-import uuid
 import client.MediaServiceClient as MediaServiceClient
+import config
+import dto
+import dto.mapper as mapper
+import fileextractlib.LlamaRunner as LlamaRunner
+from TopicModel import TopicModel
 from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto, \
     AiEntityProcessingProgressDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
+from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
 from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
 from fileextractlib.LectureVideoEmbeddingGenerator import LectureVideoEmbeddingGenerator
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
-import logging
 from fileextractlib.VideoProcessor import VideoProcessor
-from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
-import io
-import dto.mapper as mapper
-import config
 from persistence.IngestionStateDbConnector import IngestionStateDbConnector
 from persistence.MediaRecordInfoDbConnector import MediaRecordInfoDbConnector
 from persistence.SegmentDbConnector import SegmentDbConnector
 from persistence.entities import *
 from utils.SortedPriorityQueue import SortedPriorityQueue
-import threading
 
 _logger = logging.getLogger(__name__)
 
@@ -91,8 +92,8 @@ class DocProcAiService:
 
             _logger.info("Ingesting media record with download URL: " + download_url)
             self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
-                                                       IngestionEntityTypeDbType.MEDIA_RECORD,
-                                                       IngestionStateDbType.PROCESSING)
+                                                                       IngestionEntityTypeDbType.MEDIA_RECORD,
+                                                                       IngestionStateDbType.PROCESSING)
 
             self.segment_database.delete_document_segments_by_media_record_id([media_record_id])
             self.segment_database.delete_video_segments_by_media_record_id([media_record_id])
@@ -155,19 +156,35 @@ class DocProcAiService:
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
+            self.generate_tags_for_media_records()
+
             self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
-                                                       IngestionEntityTypeDbType.MEDIA_RECORD,
-                                                       IngestionStateDbType.DONE)
+                                                                       IngestionEntityTypeDbType.MEDIA_RECORD,
+                                                                       IngestionStateDbType.DONE)
 
             _logger.info("Finished ingesting media record with download URL: " + download_url)
 
         priority = 0
         self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
-                                                   IngestionEntityTypeDbType.MEDIA_RECORD,
-                                                   IngestionStateDbType.ENQUEUED)
+                                                                   IngestionEntityTypeDbType.MEDIA_RECORD,
+                                                                   IngestionStateDbType.ENQUEUED)
         self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(media_record_id,
                                                                             ingest_media_record_task,
                                                                             priority))
+
+    def generate_tags_for_media_records(self):
+        record_segments = self.segment_database.get_all_record_segments()
+        media_records = self.media_record_info_database.get_all_media_records()
+
+        topic_model = TopicModel(record_segments, media_records)
+
+        _logger.info("Running topic model")
+        topic_model.create_topic_model()
+        _logger.info("Finished running topic model")
+        media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
+        for media_record_id, tags in media_records_with_tags.items():
+            self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
+        _logger.info("Generated tags for media records.")
 
     def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID):
         """
@@ -181,8 +198,8 @@ class DocProcAiService:
             """
             _logger.info("Generating content media record links for content " + str(content_id) + "...")
             self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                       IngestionEntityTypeDbType.CONTENT,
-                                                       IngestionStateDbType.PROCESSING)
+                                                                       IngestionEntityTypeDbType.CONTENT,
+                                                                       IngestionStateDbType.PROCESSING)
 
             start_time = time.time()
 
@@ -221,12 +238,12 @@ class DocProcAiService:
                                                                           segment2_id,
                                                                           content_id):
                     self.segment_database.insert_media_record_segment_link(content_id,
-                                                                   segment1_id,
-                                                                   segment2_id)
+                                                                           segment1_id,
+                                                                           segment2_id)
 
             self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                       IngestionEntityTypeDbType.CONTENT,
-                                                       IngestionStateDbType.DONE)
+                                                                       IngestionEntityTypeDbType.CONTENT,
+                                                                       IngestionStateDbType.DONE)
             _logger.info("Generated content media record links for content "
                          + str(content_id) + " in " + str(time.time() - start_time) + " seconds.")
 
@@ -234,8 +251,8 @@ class DocProcAiService:
         # priority items are processed last), so that the media records which are being linked have been processed
         # before being linked
         self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                   IngestionEntityTypeDbType.CONTENT,
-                                                   IngestionStateDbType.ENQUEUED)
+                                                                   IngestionEntityTypeDbType.CONTENT,
+                                                                   IngestionStateDbType.ENQUEUED)
         self._background_task_queue.put(
             DocProcAiService.BackgroundTaskItem(content_id, generate_content_media_record_links_task, priority=1))
 
@@ -330,6 +347,17 @@ class DocProcAiService:
         """
         return self.media_record_info_database.get_media_record_summary_by_media_record_id(media_record_id)
 
+    def get_media_record_tags(self, media_record_id: uuid.UUID) -> list[str]:
+        """
+        Returns the auto generated tags of the specified media record as a list.
+        :param media_record_id: The ID of the media record
+        :return: List containing the tags
+        """
+
+        return self.media_record_info_database.get_media_record_tags_by_media_record_id(media_record_id)
+
+    b
+
     def get_entities_ai_processing_state(self, entity_ids: list[uuid.UUID]) -> list[AiEntityProcessingProgressDto]:
         """
         For the entities with the specified IDs, gets their AI processing progress and returns a list containing their
@@ -399,9 +427,9 @@ class DocProcAiService:
         query_embedding = self.__sentence_embedding_runner.generate_embeddings([query_text])[0]
 
         query_result = self.segment_database.get_top_record_segments_by_embedding_distance(query_embedding,
-                                                                                   count,
-                                                                                   media_record_blacklist,
-                                                                                   media_record_whitelist)
+                                                                                           count,
+                                                                                           media_record_blacklist,
+                                                                                           media_record_whitelist)
 
         return [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
@@ -425,9 +453,9 @@ class DocProcAiService:
 
         # Fetch one more result than "count", because results will include the segment we're comparing to itself!
         query_result = self.segment_database.get_top_record_segments_by_embedding_distance(query_embedding,
-                                                                                   count + 1,
-                                                                                   media_record_blacklist,
-                                                                                   media_record_whitelist)
+                                                                                           count + 1,
+                                                                                           media_record_blacklist,
+                                                                                           media_record_whitelist)
 
         results = [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
