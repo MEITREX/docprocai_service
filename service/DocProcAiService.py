@@ -16,7 +16,7 @@ import config
 import dto
 import dto.mapper as mapper
 import fileextractlib.LlamaRunner as LlamaRunner
-from TopicModel import TopicModel
+from fileextractlib.TopicModel import TopicModel
 from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto, \
     AiEntityProcessingProgressDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
