@@ -17,39 +17,53 @@ class SegmentDbConnector:
 
         # ensure database tables exist
         # table which contains the sections of all documents including their text, page number, and text embedding
-        self.db_connection.execute("""
-                                   CREATE TABLE IF NOT EXISTS document_segments (
-                                     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                                     text text,
-                                     media_record_id uuid,
-                                     page int,
-                                     thumbnail bytea,
-                                     title text,
-                                     embedding vector(1024)
-                                   );
-                                   """)
-        # table which contains the sections of all videos including their screen text, transcript, start time, and text
-        self.db_connection.execute("""
-                                   CREATE TABLE IF NOT EXISTS video_segments (
-                                     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                                     screen_text text,
-                                     transcript text,
-                                     media_record_id uuid,
-                                     start_time int,
-                                     thumbnail bytea,
-                                     title text,
-                                     embedding vector(1024)
-                                   );
-                                   """)
+        self.db_connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS document_segments (
+              id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+              media_record_id uuid,
+              text text,
+              page int,
+              thumbnail bytea,
+              title text,
+              embedding vector(1024)
+            );
+            """)
+        # table which contains the sections of all videos including their screen text, transcript, start time
+        self.db_connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS video_segments (
+              id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+              media_record_id uuid,
+              text text,
+              transcript text,
+              start_time int,
+              thumbnail bytea,
+              title text,
+              embedding vector(1024)
+            );
+            """)
+        # table which contains links between segments of assessment textual representations
+        self.db_connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assessment_segments (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                assessment_id uuid,
+                text text,
+                embedding vector(1024)
+            );
+            """
+        )
         # table which contains links between segments of different media records
         # we can't use foreign keys here because the segments live in multiple tables
-        self.db_connection.execute("""
-                                   CREATE TABLE IF NOT EXISTS media_record_links (
-                                     content_id uuid,
-                                     segment1_id uuid,
-                                     segment2_id uuid
-                                   );
-                                   """)
+        self.db_connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS media_record_links (
+              content_id uuid,
+              segment1_id uuid,
+              segment2_id uuid
+            );
+            """)
 
     def insert_document_segment(self, text: str, media_record_id: UUID, page_index: int,
                                 thumbnail: bytes, title: Optional[str], embedding: Tensor) -> None:
@@ -65,7 +79,7 @@ class SegmentDbConnector:
         self.db_connection.execute(
             query="""
                   INSERT INTO video_segments (
-                    screen_text,
+                    text,
                     transcript,
                     media_record_id,
                     start_time,
@@ -76,6 +90,33 @@ class SegmentDbConnector:
                   VALUES (%s, %s, %s, %s, %s, %s, %s)
                   """,
             params=(screen_text, transcript, media_record_id, start_time, thumbnail, title, embedding))
+
+    def insert_assessment_segment(self, assessment_id: UUID, textual_representation: str, embedding: Tensor) -> None:
+        self.db_connection.execute(
+            query=
+            """
+            INSERT INTO assessment_segments (
+                assessment_id,
+                textual_representation,
+                embedding
+            )
+            VALUES (%s, %s, %s);
+            """,
+            params=(assessment_id, textual_representation, embedding)
+        )
+
+    def delete_assessment_segments_by_assessment_id(self, assessment_id: UUID) -> list[AssessmentSegmentEntity]:
+        query_results = self.db_connection.execute(
+            query=
+            """
+            DELETE FROM assessment_segments
+            WHERE assessment_id = %s
+            RETURNING *;
+            """,
+            params=(assessment_id,)
+        ).fetchall()
+
+        return [SegmentDbConnector.__assessment_segment_query_result_to_object(result) for result in query_results]
 
     def insert_media_record_segment_link(self, content_id: UUID, segment1_id: UUID, segment2_id: UUID) -> None:
         self.db_connection.execute(
@@ -161,10 +202,12 @@ class SegmentDbConnector:
 
         return result["exists"]
 
-    def get_top_record_segments_by_embedding_distance(self, query_embedding: Tensor,
-                                                      count: int,
-                                                      media_record_id_blacklist: list[UUID],
-                                                      media_record_id_whitelist: list[UUID]) \
+    def get_top_segments_by_embedding_distance(self, query_embedding: Tensor,
+                                               count: int,
+                                               media_record_id_blacklist: list[UUID],
+                                               media_record_id_whitelist: list[UUID],
+                                               assessment_id_blacklist: list[UUID],
+                                               assessment_id_whitelist: list[UUID]) \
             -> list[SemanticSearchResultEntity]:
         # sql query to get the closest embeddings to the query embedding, both from the video and document tables
         query = """
@@ -172,11 +215,11 @@ class SegmentDbConnector:
                         SELECT
                             id,
                             media_record_id,
+                            NULL::uuid AS assessment_id,
                             'document' AS source,
                             page,
-                            NULL::integer AS "start_time",
+                            NULL::integer AS start_time,
                             text,
-                            NULL::text AS "screen_text",
                             NULL::text AS transcript,
                             title,
                             thumbnail,
@@ -189,11 +232,11 @@ class SegmentDbConnector:
                         SELECT 
                             id,
                             media_record_id,
+                            NULL::uuid AS assessment_id,
                             'video' AS source,
                             NULL::integer AS page,
                             start_time,
-                            NULL::text AS text,
-                            screen_text,
+                            text,
                             transcript,
                             title,
                             thumbnail,
@@ -202,10 +245,29 @@ class SegmentDbConnector:
                         FROM video_segments
                         WHERE media_record_id = ANY(%(mediaRecordWhitelist)s) AND NOT media_record_id = ANY(%(mediaRecordBlacklist)s)
                     ),
+                    assessment_results AS (
+                        SELECT
+                            id,
+                            NULL::uuid AS media_record_id,
+                            assessment_id,
+                            'assessment' AS source,
+                            NULL::integer AS page,
+                            NULL::integer AS start_time,
+                            text,
+                            NULL::text AS transcript,
+                            NULL::text AS title,
+                            NULL:bytea AS thumbnail,
+                            embedding,
+                            embedding <=> %(query_embedding)s AS score
+                        FROM assessment_segments
+                        WHERE assessment_id = ANY(%(assessmentWhitelist)s) AND NOT assessment_id = ANY(%(assessmentWhitelist)s)
+                    ),
                     results AS (
                         SELECT * FROM document_results
                         UNION ALL
                         SELECT * FROM video_results
+                        UNION ALL
+                        SELECT * FROM assessment_results
                     )
                     SELECT * FROM results ORDER BY score LIMIT %(count)s
                 """
@@ -214,7 +276,9 @@ class SegmentDbConnector:
             "query_embedding": query_embedding,
             "count": count,
             "mediaRecordBlacklist": media_record_id_blacklist,
-            "mediaRecordWhitelist": media_record_id_whitelist
+            "mediaRecordWhitelist": media_record_id_whitelist,
+            "assessmentWhitelist": assessment_id_whitelist,
+            "assessmentBlacklist": assessment_id_blacklist,
         }).fetchall()
 
         return [SemanticSearchResultEntity(
@@ -232,7 +296,6 @@ class SegmentDbConnector:
                         'document' AS source,
                         page,
                         NULL::integer AS start_time,
-                        NULL::text AS screen_text,
                         NULL::text AS transcript,
                         text,
                         thumbnail,
@@ -248,9 +311,8 @@ class SegmentDbConnector:
                         'video' AS source,
                         NULL::integer AS page,
                         start_time,
-                        screen_text,
                         transcript,
-                        NULL::text AS text,
+                        text,
                         thumbnail,
                         title,
                         embedding
@@ -276,7 +338,6 @@ class SegmentDbConnector:
                         'document' AS source,
                         page,
                         NULL::integer AS start_time,
-                        NULL::text AS screen_text,
                         NULL::text AS transcript,
                         text,
                         thumbnail,
@@ -291,9 +352,8 @@ class SegmentDbConnector:
                         'video' AS source,
                         NULL::integer AS page,
                         start_time,
-                        screen_text,
                         transcript,
-                        NULL::text AS text,
+                        text,
                         thumbnail,
                         title,
                         embedding
@@ -318,7 +378,6 @@ class SegmentDbConnector:
                         page,
                         NULL::integer AS start_time,
                         text,
-                        NULL::text AS screen_text,
                         NULL::text AS transcript,
                         thumbnail,
                         title,
@@ -333,8 +392,7 @@ class SegmentDbConnector:
                         'video' AS source,
                         NULL::integer AS page,
                         start_time,
-                        NULL::text AS text,
-                        screen_text,
+                        text,
                         transcript,
                         thumbnail,
                         title,
@@ -378,8 +436,13 @@ class SegmentDbConnector:
     @staticmethod
     def __video_segment_query_result_to_object(query_result) -> VideoSegmentEntity:
         return VideoSegmentEntity(query_result["id"], query_result["media_record_id"], query_result["start_time"],
-                                  query_result["transcript"], query_result["screen_text"],
+                                  query_result["transcript"], query_result["text"],
                                   bytes(query_result["thumbnail"]), query_result["title"], query_result["embedding"])
+
+    @staticmethod
+    def __assessment_segment_query_result_to_object(query_result) -> AssessmentSegmentEntity:
+        return AssessmentSegmentEntity(query_result["id"], query_result["assessment_id"],
+                                       query_result["textual_representation"], query_result["embedding"])
 
     @staticmethod
     def __media_record_segment_link_query_result_to_object(query_result) -> MediaRecordSegmentLinkEntity:

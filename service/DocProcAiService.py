@@ -17,8 +17,8 @@ import dto
 import dto.mapper as mapper
 import fileextractlib.LlamaRunner as LlamaRunner
 from fileextractlib.TopicModel import TopicModel
-from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto, \
-    AiEntityProcessingProgressDto
+from dto import MediaRecordSegmentLinkDto, SemanticSearchResultDto, \
+    AiEntityProcessingProgressDto, MediaRecordSegmentDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
 from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
 from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
@@ -79,7 +79,7 @@ class DocProcAiService:
     def __del__(self):
         self._keep_background_task_thread_alive = False
 
-    def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
+    def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID) -> None:
         """
         Enqueues a task to ingest a media record with the given ID, which will be executed in the background.
         """
@@ -156,7 +156,7 @@ class DocProcAiService:
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
-            self.generate_tags_for_media_records()
+            self.__generate_tags_for_media_records()
 
             self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
                                                                        IngestionEntityTypeDbType.MEDIA_RECORD,
@@ -172,7 +172,7 @@ class DocProcAiService:
                                                                             ingest_media_record_task,
                                                                             priority))
 
-    def generate_tags_for_media_records(self):
+    def __generate_tags_for_media_records(self):
         record_segments = self.segment_database.get_all_record_segments()
         media_records = self.media_record_info_database.get_all_media_records()
 
@@ -186,7 +186,37 @@ class DocProcAiService:
             self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
         _logger.info("Generated tags for media records.")
 
-    def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID):
+    def enqueue_generate_assessment_segments(self,
+                                             assessment_id: uuid.UUID,
+                                             textual_representation: list[str]) -> None:
+        async def generate_assessment_segments_task() -> None:
+            _logger.info("Ingesting assessment with id " + str(assessment_id))
+            self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
+                                                                       IngestionEntityTypeDbType.ASSESSMENT,
+                                                                       IngestionStateDbType.PROCESSING)
+
+            self.segment_database.delete_assessment_segments_by_assessment_id(assessment_id)
+
+            sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
+            embeddings: list[Tensor] = sentence_embedding_runner.generate_embeddings(textual_representation)
+
+            for i, embedding in enumerate(embeddings):
+                self.segment_database.insert_assessment_segment(assessment_id, textual_representation[i], embedding)
+
+            self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
+                                                                       IngestionEntityTypeDbType.ASSESSMENT,
+                                                                       IngestionStateDbType.DONE)
+            _logger.info("Finished ingesting assessment with id " + str(assessment_id))
+
+        priority = 2
+        self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
+                                                                   IngestionEntityTypeDbType.ASSESSMENT,
+                                                                   IngestionStateDbType.ENQUEUED)
+        self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(assessment_id,
+                                                                            generate_assessment_segments_task,
+                                                                            priority))
+
+    def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID) -> None:
         """
         Enqueues a task to generate media record links for a content with the given ID, which will be executed in the
         background.
@@ -198,7 +228,7 @@ class DocProcAiService:
             """
             _logger.info("Generating content media record links for content " + str(content_id) + "...")
             self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                                       IngestionEntityTypeDbType.CONTENT,
+                                                                       IngestionEntityTypeDbType.MEDIA_CONTENT,
                                                                        IngestionStateDbType.PROCESSING)
 
             start_time = time.time()
@@ -242,7 +272,7 @@ class DocProcAiService:
                                                                            segment2_id)
 
             self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                                       IngestionEntityTypeDbType.CONTENT,
+                                                                       IngestionEntityTypeDbType.MEDIA_CONTENT,
                                                                        IngestionStateDbType.DONE)
             _logger.info("Generated content media record links for content "
                          + str(content_id) + " in " + str(time.time() - start_time) + " seconds.")
@@ -251,7 +281,7 @@ class DocProcAiService:
         # priority items are processed last), so that the media records which are being linked have been processed
         # before being linked
         self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                                   IngestionEntityTypeDbType.CONTENT,
+                                                                   IngestionEntityTypeDbType.MEDIA_CONTENT,
                                                                    IngestionStateDbType.ENQUEUED)
         self._background_task_queue.put(
             DocProcAiService.BackgroundTaskItem(content_id, generate_content_media_record_links_task, priority=1))
@@ -311,7 +341,7 @@ class DocProcAiService:
         } for segment_link in result_links]
 
     def get_media_record_segments(self, media_record_id: uuid.UUID) \
-            -> list[DocumentRecordSegmentDto | VideoRecordSegmentDto]:
+            -> list[MediaRecordSegmentDto]:
         """
         Gets the segments of the specified media record.
         """
@@ -424,10 +454,10 @@ class DocProcAiService:
         """
         query_embedding = self.__sentence_embedding_runner.generate_embeddings([query_text])[0]
 
-        query_result = self.segment_database.get_top_record_segments_by_embedding_distance(query_embedding,
-                                                                                           count,
-                                                                                           media_record_blacklist,
-                                                                                           media_record_whitelist)
+        query_result = self.segment_database.get_top_segments_by_embedding_distance(query_embedding,
+                                                                                    count,
+                                                                                    media_record_blacklist,
+                                                                                    media_record_whitelist)
 
         return [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
@@ -450,10 +480,10 @@ class DocProcAiService:
         query_embedding = self.segment_database.get_record_segments_by_ids([media_record_segment_id])[0].embedding
 
         # Fetch one more result than "count", because results will include the segment we're comparing to itself!
-        query_result = self.segment_database.get_top_record_segments_by_embedding_distance(query_embedding,
-                                                                                           count + 1,
-                                                                                           media_record_blacklist,
-                                                                                           media_record_whitelist)
+        query_result = self.segment_database.get_top_segments_by_embedding_distance(query_embedding,
+                                                                                    count + 1,
+                                                                                    media_record_blacklist,
+                                                                                    media_record_whitelist)
 
         results = [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
@@ -470,7 +500,7 @@ class DocProcAiService:
         entities_in_queue = self.ingestion_state_database.get_enqueued_or_processing_ingestion_entities()
 
         def enqueue_entity(entity_id: UUID, entity_type: IngestionEntityTypeDbType):
-            if entity_type == IngestionEntityTypeDbType.CONTENT:
+            if entity_type == IngestionEntityTypeDbType.MEDIA_CONTENT:
                 self.enqueue_generate_content_media_record_links(entity_id)
             elif entity_type == IngestionEntityTypeDbType.MEDIA_RECORD:
                 self.enqueue_ingest_media_record_task(entity_id)

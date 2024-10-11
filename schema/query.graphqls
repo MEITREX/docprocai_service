@@ -18,8 +18,8 @@ type Query {
         mediaRecordWhitelist: [UUID!]! = []) : [SemanticSearchResult!]!
 
     """
-    Performs a semantic search which searches for media record segments which are the most similar to the media record
-    segment with the provided id.
+    Performs a semantic search which searches for media record segment entities & assessment entities which are the most
+    similar to the entity with the provided id.
 
     Returns by default 10 results, or the amount specified by "count".
 
@@ -30,7 +30,7 @@ type Query {
     ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
     any permissions check and should not be called without any validation of the caller's permissions. ⚠️
     """
-    _internal_noauth_getSemanticallySimilarMediaRecordSegments(mediaRecordSegmentId: UUID!,
+    _internal_noauth_getSemanticallySimilarEntities(entityId: UUID!,
         count: Int = 10,
         mediaRecordBlacklist: [UUID!]! = [],
         mediaRecordWhitelist: [UUID!]! = []): [SemanticSearchResult!]!
@@ -95,9 +95,13 @@ type Query {
     _internal_noauth_getMediaRecordsAiProcessingProgress(mediaRecordIds: [UUID!]!): [AiEntityProcessingProgress!]!
 
     """
-    Gets the DocProcAI ingestion processing state of the contents with the specified IDs. "UNKNOWN" is returned if the
-    specified ID is unknown to the service (either because a content with the given ID does not exist or because
-    the content has not yet ever been enqueued into the service's processing system).
+    Gets the DocProcAI ingestion processing state of the contents/assessments with the specified IDs.
+
+    If the content is a MediaContent, this is the progress of the linking step of the MediaContent's media record. If
+    the content is an Assessment, this is the progress of the assessment text embedding generation.
+
+    "UNKNOWN" is returned if the specified ID is unknown to the service (either because a content with the given ID
+    does not exist or because the content has not yet ever been enqueued into the service's processing system).
 
     ⚠️ This query is only accessible internally in the system and allows the caller to fetch contents without
     any permissions check and should not be called without any validation of the caller's permissions. ⚠️
@@ -110,12 +114,37 @@ type MediaRecordSegmentLink {
     segment2: MediaRecordSegment!
 }
 
-type SemanticSearchResult {
+interface SemanticSearchResult {
     """
     The similarity score of the search result.
     """
     score: Float!
+}
+
+type MediaRecordSegmentSemanticSearchResult implements SemanticSearchResult {
+    """
+    The similarity score of the search result.
+    """
+    score: Float!
+    """
+    The media record segment this search result is referencing.
+    """
     mediaRecordSegment: MediaRecordSegment!
+}
+
+type AssessmentSemanticSearchResult implements SemanticSearchResult {
+    """
+    The similarity score of the search result.
+    """
+    score: Float!
+    """
+    ID of the assessment this search result is referencing.
+    """
+    assessmentId: UUID!
+}
+
+type AssessmentContentReference {
+    assessmentId: UUID!
 }
 
 interface MediaRecordSegment {

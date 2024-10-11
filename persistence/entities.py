@@ -33,6 +33,14 @@ class VideoSegmentEntity:
         self.embedding = embedding
 
 
+class AssessmentSegmentEntity:
+    def __init__(self, id: UUID, assessment_id: UUID, textual_representation: str, embedding: Tensor):
+        self.id = id
+        self.assessment_id = assessment_id
+        self.textual_representation = textual_representation
+        self.embedding = embedding
+
+
 class MediaRecordSegmentLinkEntity:
     def __init__(self, content_id: UUID, segment1_id: UUID, segment2_id: UUID):
         self.content_id = content_id
@@ -54,8 +62,8 @@ class IngestionStateDbType(Enum):
 
 class IngestionEntityTypeDbType(Enum):
     MEDIA_RECORD = auto()
-    CONTENT = auto()
-
+    MEDIA_CONTENT = auto()
+    ASSESSMENT = auto()
 
 class EntityIngestionInfoEntity:
     def __init__(self, entity_id: UUID, entity_type: IngestionEntityTypeDbType,ingestion_state: IngestionStateDbType):

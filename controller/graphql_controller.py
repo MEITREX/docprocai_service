@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 import ariadne
@@ -62,16 +63,16 @@ class GraphQLController:
 
         @query.field("_internal_noauth_getMediaRecordSegments")
         def get_media_record_segments(parent, info, mediaRecordId: UUID) \
-                -> list[dto.VideoRecordSegmentDto | dto.DocumentRecordSegmentDto]:
+                -> list[dto.MediaRecordSegmentDto]:
             return ai_service.get_media_record_segments(mediaRecordId)
 
         @query.field("_internal_noauth_getMediaRecordSegmentById")
         def get_media_record_segment_by_id(parent, info, mediaRecordSegmentId: UUID) \
-                -> dto.VideoRecordSegmentDto | dto.DocumentRecordSegmentDto:
+                -> dto.MediaRecordSegmentDto:
             return ai_service.get_media_record_segment_by_id(mediaRecordSegmentId)
 
         @query.field("_internal_noauth_getMediaRecordCaptions")
-        def get_media_record_captions(parent, info, mediaRecordId: UUID) -> str | None:
+        def get_media_record_captions(parent, info, mediaRecordId: UUID) -> Optional[str]:
             return ai_service.get_media_record_captions(mediaRecordId)
 
         @query.field("_internal_noauth_getMediaRecordSummary")
@@ -94,7 +95,7 @@ class GraphQLController:
 
         media_record_segment_interface = bindable(ariadne.InterfaceType("MediaRecordSegment"))
         @media_record_segment_interface.type_resolver
-        def resolve_semantic_search_result_type(obj, *_):
+        def resolve_media_record_segment_type(obj, *_):
             if does_dict_match_typed_dict(obj, dto.DocumentRecordSegmentDto):
                 return "DocumentRecordSegment"
             elif does_dict_match_typed_dict(obj, dto.VideoRecordSegmentDto):
@@ -102,6 +103,17 @@ class GraphQLController:
             else:
                 raise ValueError("Could not resolve source type of MediaRecordSegment interface. Object does not match"
                                  + " any known definitions", obj)
+
+        semantic_search_result_interface = bindable(ariadne.InterfaceType("SemanticSearchResult"))
+        @semantic_search_result_interface.type_resolver
+        def resolve_semantic_search_result_type(obj, *_):
+            if does_dict_match_typed_dict(obj, dto.AssessmentSemanticSearchResultDto):
+                return "AssessmentSemanticSearchResult"
+            elif does_dict_match_typed_dict(obj, dto.MediaRecordSegmentSemanticSearchResultDto):
+                return "MediaRecordSegmentSemanticSearchResult"
+            else:
+                raise ValueError("Could not resolve source type of SemanticSearchResult interface. Object does not "
+                                 + "match any known definitions", obj)
 
         uuid_scalar = bindable(ariadne.ScalarType("UUID"))
         @uuid_scalar.serializer

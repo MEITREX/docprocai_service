@@ -26,3 +26,10 @@ class DaprController:
             content_id = uuid.UUID(data["data"]["contentId"])
 
             ai_service.enqueue_generate_content_media_record_links(content_id)
+
+        @dapr_app.subscribe(pubsub="meitrex", topic="assessment-content-mutated")
+        def assessment_content_mutated_handler(data: dict):
+            assessment_id = uuid.UUID(data["data"]["assessmentId"])
+            textual_representation: list[str] = data["data"]["textualRepresentation"]
+
+            ai_service.enqueue_generate_assessment_segments(assessment_id, textual_representation)
