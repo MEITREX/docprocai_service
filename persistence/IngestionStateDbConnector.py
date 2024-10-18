@@ -35,7 +35,8 @@ class IngestionStateDbConnector:
             DO $$ BEGIN
                 CREATE TYPE ingestion_entity_type AS ENUM (
                   'MEDIA_RECORD',
-                  'CONTENT'
+                  'MEDIA_CONTENT',
+                  'ASSESSMENT'
                 );
             EXCEPTION
                 WHEN duplicate_object THEN null;
