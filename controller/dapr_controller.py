@@ -2,6 +2,8 @@ import dapr
 from dapr.ext.fastapi.app import DaprApp
 from fastapi import FastAPI
 import uuid
+
+from dto import TaskInformationDto
 from service.DocProcAiService import DocProcAiService
 
 
@@ -26,3 +28,10 @@ class DaprController:
             content_id = uuid.UUID(data["data"]["contentId"])
 
             ai_service.enqueue_generate_content_media_record_links(content_id)
+
+        @dapr_app.subscribe(pubsub="meitrex", topic="assessment-content-mutated")
+        def assessment_content_mutated_handler(data: dict):
+            assessment_id = uuid.UUID(data["data"]["assessmentId"])
+            task_information: list[TaskInformationDto] = data["data"]["taskInformationList"]
+
+            ai_service.enqueue_generate_assessment_segments(assessment_id, task_information)

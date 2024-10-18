@@ -3,23 +3,23 @@ from bertopic import BERTopic
 from bertopic.representation import MaximalMarginalRelevance
 from bertopic.vectorizers import ClassTfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
-
 from persistence.entities import DocumentSegmentEntity, VideoSegmentEntity
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class TopicModel:
-    record_segments = []
-    media_records = {}
     model = BERTopic()
-    docs = []
 
     def __init__(self, record_segments: list[DocumentSegmentEntity | VideoSegmentEntity], media_records):
-
+        self.record_segments = []
+        self.media_records = {}
+        self.docs = []
         self.record_segments = record_segments
         self.media_records = media_records
 
     def create_topic_model(self):
-
         embeddings = []
 
         for entity in self.record_segments:

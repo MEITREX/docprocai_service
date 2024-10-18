@@ -24,15 +24,23 @@ class MediaServiceClient:
         result = await self.__client.execute_async(query, variable_values=variables)
         return result["_internal_noauth_mediaRecordsByIds"][0]
 
-    async def get_media_record_ids_of_content(self, content_id: uuid.UUID) -> list[uuid.UUID]:
+    async def get_media_record_ids_of_contents(self, content_ids: list[uuid.UUID]) -> list[uuid.UUID]:
         query = gql.gql(
             """
-            query GetMediaRecordIdsOfContent($contentId: UUID!) {
-                _internal_noauth_mediaRecordsByContentIds(contentIds: [$contentId]) {
+            query GetMediaRecordIdsOfContent($contentIds: [UUID!]!) {
+                _internal_noauth_mediaRecordsByContentIds(contentIds: $contentIds) {
                     id
                 }
             }
             """)
-        variables = {"contentId": str(content_id)}
-        result = await self.__client.execute_async(query, variable_values=variables)
-        return [x["id"] for x in result["_internal_noauth_mediaRecordsByContentIds"][0]]
+        # we need to convert the UUIDs to strings first, otherwise the graphql client we use struggles with them
+        variables = {"contentIds": [str(x) for x in content_ids]}
+        query_result = await self.__client.execute_async(query, variable_values=variables)
+
+        # query result is a list of lists, flat-map it
+        media_records: list[uuid.UUID] = []
+        for media_record_list in query_result["_internal_noauth_mediaRecordsByContentIds"]:
+            for media_record in media_record_list:
+                media_records.append(media_record["id"])
+
+        return media_records

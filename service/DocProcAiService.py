@@ -17,8 +17,8 @@ import dto
 import dto.mapper as mapper
 import fileextractlib.LlamaRunner as LlamaRunner
 from fileextractlib.TopicModel import TopicModel
-from dto import MediaRecordSegmentLinkDto, DocumentRecordSegmentDto, VideoRecordSegmentDto, SemanticSearchResultDto, \
-    AiEntityProcessingProgressDto
+from dto import MediaRecordSegmentLinkDto, SemanticSearchResultDto, \
+    AiEntityProcessingProgressDto, MediaRecordSegmentDto, TaskInformationDto
 from fileextractlib.DocumentProcessor import DocumentProcessor
 from fileextractlib.ImageTemplateMatcher import ImageTemplateMatcher
 from fileextractlib.LectureDocumentEmbeddingGenerator import LectureDocumentEmbeddingGenerator
@@ -79,7 +79,7 @@ class DocProcAiService:
     def __del__(self):
         self._keep_background_task_thread_alive = False
 
-    def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID):
+    def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID) -> None:
         """
         Enqueues a task to ingest a media record with the given ID, which will be executed in the background.
         """
@@ -156,7 +156,7 @@ class DocProcAiService:
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
-            self.generate_tags_for_media_records()
+            self.__generate_tags_for_media_records()
 
             self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
                                                                        IngestionEntityTypeDbType.MEDIA_RECORD,
@@ -172,8 +172,8 @@ class DocProcAiService:
                                                                             ingest_media_record_task,
                                                                             priority))
 
-    def generate_tags_for_media_records(self):
-        record_segments = self.segment_database.get_all_record_segments()
+    def __generate_tags_for_media_records(self):
+        record_segments = self.segment_database.get_all_media_record_segments()
         media_records = self.media_record_info_database.get_all_media_records()
 
         topic_model = TopicModel(record_segments, media_records)
@@ -186,7 +186,42 @@ class DocProcAiService:
             self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
         _logger.info("Generated tags for media records.")
 
-    def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID):
+    def enqueue_generate_assessment_segments(self,
+                                             assessment_id: uuid.UUID,
+                                             task_information_list: list[TaskInformationDto]) -> None:
+        async def generate_assessment_segments_task() -> None:
+            _logger.info("Ingesting assessment with id " + str(assessment_id))
+            self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
+                                                                       IngestionEntityTypeDbType.ASSESSMENT,
+                                                                       IngestionStateDbType.PROCESSING)
+
+            self.segment_database.delete_assessment_segments_by_assessment_id(assessment_id)
+
+            sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
+
+            for task_information in task_information_list:
+                embedding: Tensor = sentence_embedding_runner.generate_embeddings(
+                    [task_information["textualRepresentation"]])[0]
+
+                self.segment_database.upsert_assessment_segment(task_information["taskId"],
+                                                                assessment_id,
+                                                                task_information["textualRepresentation"],
+                                                                embedding)
+
+            self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
+                                                                       IngestionEntityTypeDbType.ASSESSMENT,
+                                                                       IngestionStateDbType.DONE)
+            _logger.info("Finished ingesting assessment with id " + str(assessment_id))
+
+        priority = 2
+        self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
+                                                                   IngestionEntityTypeDbType.ASSESSMENT,
+                                                                   IngestionStateDbType.ENQUEUED)
+        self._background_task_queue.put(DocProcAiService.BackgroundTaskItem(assessment_id,
+                                                                            generate_assessment_segments_task,
+                                                                            priority))
+
+    def enqueue_generate_content_media_record_links(self, content_id: uuid.UUID) -> None:
         """
         Enqueues a task to generate media record links for a content with the given ID, which will be executed in the
         background.
@@ -198,7 +233,7 @@ class DocProcAiService:
             """
             _logger.info("Generating content media record links for content " + str(content_id) + "...")
             self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                                       IngestionEntityTypeDbType.CONTENT,
+                                                                       IngestionEntityTypeDbType.MEDIA_CONTENT,
                                                                        IngestionStateDbType.PROCESSING)
 
             start_time = time.time()
@@ -206,13 +241,13 @@ class DocProcAiService:
             self.segment_database.delete_media_record_segment_links_by_content_ids([content_id])
 
             # get the ids of the media records which are part of this content
-            media_record_ids = await self.__media_service_client.get_media_record_ids_of_content(content_id)
+            media_record_ids = await self.__media_service_client.get_media_record_ids_of_contents([content_id])
 
             # we could first run a query to check if any records even match, but considering that linking usually only
             # happens after ingestion, we can assume that the records exist, so that would be an unnecessary query
             # From the returned list, create a dict sorted by which segment is associated with which media record
             media_records_segments: dict[uuid.UUID, list[DocumentSegmentEntity | VideoSegmentEntity]] = {}
-            for result in self.segment_database.get_record_segments_by_media_record_ids(media_record_ids):
+            for result in self.segment_database.get_media_record_segments_by_media_record_ids(media_record_ids):
                 if result.media_record_id not in media_records_segments:
                     media_records_segments[result.media_record_id] = []
                 media_records_segments[result.media_record_id].append(result)
@@ -242,7 +277,7 @@ class DocProcAiService:
                                                                            segment2_id)
 
             self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                                       IngestionEntityTypeDbType.CONTENT,
+                                                                       IngestionEntityTypeDbType.MEDIA_CONTENT,
                                                                        IngestionStateDbType.DONE)
             _logger.info("Generated content media record links for content "
                          + str(content_id) + " in " + str(time.time() - start_time) + " seconds.")
@@ -251,7 +286,7 @@ class DocProcAiService:
         # priority items are processed last), so that the media records which are being linked have been processed
         # before being linked
         self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                                   IngestionEntityTypeDbType.CONTENT,
+                                                                   IngestionEntityTypeDbType.MEDIA_CONTENT,
                                                                    IngestionStateDbType.ENQUEUED)
         self._background_task_queue.put(
             DocProcAiService.BackgroundTaskItem(content_id, generate_content_media_record_links_task, priority=1))
@@ -300,7 +335,7 @@ class DocProcAiService:
             all_segment_ids.append(segment_link.segment1_id)
             all_segment_ids.append(segment_link.segment2_id)
 
-        result_segments = self.segment_database.get_record_segments_by_ids(all_segment_ids)
+        result_segments = self.segment_database.get_entity_segments_by_ids(all_segment_ids)
 
         # go over all links and resolve the referenced segments from entity to dto
         return [{
@@ -311,11 +346,11 @@ class DocProcAiService:
         } for segment_link in result_links]
 
     def get_media_record_segments(self, media_record_id: uuid.UUID) \
-            -> list[DocumentRecordSegmentDto | VideoRecordSegmentDto]:
+            -> list[MediaRecordSegmentDto]:
         """
         Gets the segments of the specified media record.
         """
-        results = self.segment_database.get_record_segments_by_media_record_ids([media_record_id])
+        results = self.segment_database.get_media_record_segments_by_media_record_ids([media_record_id])
 
         return [mapper.media_record_segment_entity_to_dto(result) for result in results]
 
@@ -325,7 +360,7 @@ class DocProcAiService:
         :param media_record_segment_id: ID of the media record segment to return.
         :return: The media record segment with the specified ID.
         """
-        query_results = self.segment_database.get_record_segments_by_ids([media_record_segment_id])
+        query_results = self.segment_database.get_entity_segments_by_ids([media_record_segment_id])
 
         if len(query_results) != 1:
             raise ValueError("Media record segment with specified ID does not exist.")
@@ -401,14 +436,12 @@ class DocProcAiService:
                 "state": state,
                 "queuePosition": queue_position
             })
-
         return results
 
-    def semantic_search(self,
+    async def semantic_search(self,
                         query_text: str,
                         count: int,
-                        media_record_blacklist: list[uuid.UUID],
-                        media_record_whitelist: list[uuid.UUID]) -> list[SemanticSearchResultDto]:
+                        content_whitelist: list[UUID]) -> list[SemanticSearchResultDto]:
         """
         Performs a semantic search on the specified query text. Returns the specified number of media record segments.
         Adheres to the passed black- & whitelist. Segments of media records whose ID is present in the blacklist OR
@@ -416,44 +449,54 @@ class DocProcAiService:
 
         :param query_text: String search query using which the semantic search is performed
         :param count: Number of returned search results
-        :param media_record_blacklist: Blacklist of media record ids whose segments should be excluded from the
-        search results
-        :param media_record_whitelist: Whitelist of media record ids whose segments should be included in the
-        search results
+        :param content_whitelist: Whitelist of IDs of contents whose segments should be included from the search results
         :return: List of search results
         """
         query_embedding = self.__sentence_embedding_runner.generate_embeddings([query_text])[0]
 
-        query_result = self.segment_database.get_top_record_segments_by_embedding_distance(query_embedding,
-                                                                                           count,
-                                                                                           media_record_blacklist,
-                                                                                           media_record_whitelist)
+        parent_whitelist = await self.__generate_segment_parent_whitelist(content_whitelist)
+
+        query_result = self.segment_database.get_top_segments_by_embedding_distance(query_embedding,
+                                                                                    count,
+                                                                                    parent_whitelist)
 
         return [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
-    def get_semantically_similar_media_record_segments(self, media_record_segment_id: UUID, count: int,
-                                                       media_record_blacklist: list[uuid.UUID],
-                                                       media_record_whitelist: list[uuid.UUID]) \
+    async def get_semantically_similar_entities(self, entity_id: UUID, count: int, content_whitelist: list[UUID],
+                                                excludeEntitiesWithSameParent: bool) \
             -> list[SemanticSearchResultDto]:
         """
-        Performs a semantic similarity search where the media record segments are returned which are the most
-        semantically similar to the provided media record segment.
+        Performs a semantic similarity search where the entities are returned which are the most semantically similar
+        to the provided entity.
 
-        :param media_record_segment_id: ID of the media record segment for which to search similar segments.
+        :param entity_id: ID of the entity for which to search similar segments.
         :param count: Number of returned search results
-        :param media_record_blacklist: Blacklist of media record ids whose segments should be excluded from the
-        search results
-        :param media_record_whitelist: Whitelist of media record ids whose segments should be included in the
-        search results
+        :param content_whitelist: Whitelist of content ids whose media records & segments should appear in the search
+        results
         :return: List of search results
         """
-        query_embedding = self.segment_database.get_record_segments_by_ids([media_record_segment_id])[0].embedding
+
+        # firstly, we need to get the entity segment we want to find similar ones for
+        entity_segment = self.segment_database.get_entity_segments_by_ids([entity_id])[0]
+
+        parent_whitelist = await self.__generate_segment_parent_whitelist(content_whitelist)
+
+        if excludeEntitiesWithSameParent:
+            if isinstance(entity_segment, AssessmentSegmentEntity):
+                parent_id = entity_segment.assessment_id
+            elif isinstance(entity_segment, DocumentSegmentEntity):
+                parent_id = entity_segment.media_record_id
+            elif isinstance(entity_segment, VideoSegmentEntity):
+                parent_id =entity_segment.media_record_id
+            else:
+                raise NotImplementedError("Tried to fetch parent id of unknown entity segment type.")
+
+            parent_whitelist = [x for x in parent_whitelist if x != parent_id]
 
         # Fetch one more result than "count", because results will include the segment we're comparing to itself!
-        query_result = self.segment_database.get_top_record_segments_by_embedding_distance(query_embedding,
-                                                                                           count + 1,
-                                                                                           media_record_blacklist,
-                                                                                           media_record_whitelist)
+        query_result = self.segment_database.get_top_segments_by_embedding_distance(entity_segment.embedding,
+                                                                                    count + 1,
+                                                                                    parent_whitelist)
 
         results = [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
@@ -470,7 +513,7 @@ class DocProcAiService:
         entities_in_queue = self.ingestion_state_database.get_enqueued_or_processing_ingestion_entities()
 
         def enqueue_entity(entity_id: UUID, entity_type: IngestionEntityTypeDbType):
-            if entity_type == IngestionEntityTypeDbType.CONTENT:
+            if entity_type == IngestionEntityTypeDbType.MEDIA_CONTENT:
                 self.enqueue_generate_content_media_record_links(entity_id)
             elif entity_type == IngestionEntityTypeDbType.MEDIA_RECORD:
                 self.enqueue_ingest_media_record_task(entity_id)
@@ -492,11 +535,22 @@ class DocProcAiService:
                     # A value error is raised when the item could not be found in the queue, re-queue it in that case
                     enqueue_entity(entity_id, entity_type)
 
-    """
-    Helper class used by the internal background task queue of the service.
-    """
+    async def __generate_segment_parent_whitelist(self, content_whitelist: list[UUID]) -> list[UUID]:
+        """
+        Helper function which creates a whitelist of parent IDs for segments from a content whitelist. For media record
+        segments, the parents are the media records, for assessment segments, the parent IDs are the content ids
+        (assessment IDs and content IDs are identical). This means we firstly initialize the parent_whitelist with
+        the UUIDs of the whitelisted contents, and then also fetch all IDs of media records which are children of
+        the contents.
+        """
+        parent_whitelist: list[UUID] = list(content_whitelist)
+        parent_whitelist.extend(await self.__media_service_client.get_media_record_ids_of_contents(content_whitelist))
+        return parent_whitelist
 
     class BackgroundTaskItem:
+        """
+        Helper class used by the internal background task queue of the service.
+        """
         def __init__(self, entity_id: UUID, task: Callable[[], Awaitable[None]], priority: int):
             self.entity_id = entity_id
             self.task: Callable[[], Awaitable[None]] = task
