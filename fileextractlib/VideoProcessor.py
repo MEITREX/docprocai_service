@@ -129,7 +129,7 @@ class VideoProcessor:
                         enhanced_image.save(enhanced_image_bytes, format="PNG")
                         enhanced_image_bytes.seek(0)
                         # Perform OCR using tika
-                        tika_res = tika.parser.from_buffer(enhanced_image_bytes)["content"].strip()
+                        tika_res = tika.parser.from_buffer(enhanced_image_bytes)["content"]
                         if tika_res is not None:
                             current_segment.screen_text = tika_res.strip()
                         else:
