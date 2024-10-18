@@ -9,8 +9,7 @@ def entity_to_dto(entity):
     raise NotImplementedError(f"from_entity not implemented for {type(entity)}")
 
 @singledispatch
-def media_record_segment_entity_to_dto(entity: DocumentSegmentEntity | VideoSegmentEntity) \
-    -> DocumentRecordSegmentDto | VideoRecordSegmentDto:
+def media_record_segment_entity_to_dto(entity: MediaRecordSegmentEntity) -> MediaRecordSegmentDto:
     raise NotImplementedError(f"media_record_segment_entity_to_dto not implemented for {type(entity)}")
 
 @entity_to_dto.register(DocumentSegmentEntity)
@@ -27,7 +26,7 @@ def document_segment_entity_to_dto(entity: DocumentSegmentEntity) -> DocumentRec
 
 @entity_to_dto.register(VideoSegmentEntity)
 @media_record_segment_entity_to_dto.register(VideoSegmentEntity)
-def video_segment_entity_to_dto(entity: VideoSegmentEntity) -> "VideoRecordSegmentDto":
+def video_segment_entity_to_dto(entity: VideoSegmentEntity) -> VideoRecordSegmentDto:
     return {
         "id": entity.id,
         "mediaRecordId": entity.media_record_id,
@@ -38,9 +37,24 @@ def video_segment_entity_to_dto(entity: VideoSegmentEntity) -> "VideoRecordSegme
         "title": entity.title
     }
 
-@entity_to_dto.register(SemanticSearchResultEntity)
+@singledispatch
 def semantic_search_result_entity_to_dto(entity: SemanticSearchResultEntity) -> SemanticSearchResultDto:
+    raise NotImplementedError(f"semantic_search_result_entity_to_dto not implemented for {type(entity)}")
+
+@entity_to_dto.register(MediaRecordSegmentSemanticSearchResultEntity)
+@semantic_search_result_entity_to_dto.register(MediaRecordSegmentSemanticSearchResultEntity)
+def media_record_semantic_search_result_entity_to_dto(entity: MediaRecordSegmentSemanticSearchResultEntity) \
+    -> MediaRecordSegmentSemanticSearchResultDto:
     return {
         "score": entity.score,
         "mediaRecordSegment": media_record_segment_entity_to_dto(entity.media_record_segment_entity)
+    }
+
+@entity_to_dto.register(AssessmentSemanticSearchResultEntity)
+@semantic_search_result_entity_to_dto.register(AssessmentSemanticSearchResultEntity)
+def assessment_semantic_search_result_entity_to_dto(entity: AssessmentSemanticSearchResultEntity) \
+    -> AssessmentSemanticSearchResultDto:
+    return {
+        "score": entity.score,
+        "assessmentId": entity.assessment_id
     }

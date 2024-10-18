@@ -58,3 +58,7 @@ class AiEntityProcessingProgressDto(TypedDict):
     entityId: UUID
     state: AiEntityProcessingStateDto
     queuePosition: Optional[int]
+
+class TaskInformationDto(TypedDict):
+    taskId: UUID
+    textualRepresentation: str

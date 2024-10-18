@@ -41,6 +41,10 @@ class AssessmentSegmentEntity:
         self.embedding = embedding
 
 
+type MediaRecordSegmentEntity = DocumentSegmentEntity | VideoSegmentEntity
+type EntitySegmentEntity = MediaRecordSegmentEntity | AssessmentSegmentEntity
+
+
 class MediaRecordSegmentLinkEntity:
     def __init__(self, content_id: UUID, segment1_id: UUID, segment2_id: UUID):
         self.content_id = content_id
@@ -48,10 +52,19 @@ class MediaRecordSegmentLinkEntity:
         self.segment2_id = segment2_id
 
 
-class SemanticSearchResultEntity:
+class MediaRecordSegmentSemanticSearchResultEntity:
     def __init__(self, score: float, media_record_segment_entity: VideoSegmentEntity | DocumentSegmentEntity):
         self.score = score
         self.media_record_segment_entity = media_record_segment_entity
+
+
+class AssessmentSemanticSearchResultEntity:
+    def __init__(self, score: float, assessment_id: UUID):
+        self.score = score
+        self.assessment_id = assessment_id
+
+
+type SemanticSearchResultEntity = MediaRecordSegmentSemanticSearchResultEntity | AssessmentSemanticSearchResultEntity
 
 
 class IngestionStateDbType(Enum):

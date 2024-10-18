@@ -44,17 +44,16 @@ class GraphQLController:
 
         query = bindable(ariadne.QueryType())
         @query.field("_internal_noauth_semanticSearch")
-        def semantic_search(parent, info, queryText: str, count: int,
-                            mediaRecordBlacklist: list[UUID], mediaRecordWhitelist: list[UUID]) \
+        async def semantic_search(parent, info, queryText: str, count: int, contentWhitelist: list[UUID]) \
                 -> list[dto.SemanticSearchResultDto]:
-            return ai_service.semantic_search(queryText, count, mediaRecordBlacklist, mediaRecordWhitelist)
+            return await ai_service.semantic_search(queryText, count, contentWhitelist)
 
-        @query.field("_internal_noauth_getSemanticallySimilarMediaRecordSegments")
-        def get_semantically_similar_media_record_segments(parent, info, mediaRecordSegmentId: UUID, count: int,
-                            mediaRecordBlacklist: list[UUID], mediaRecordWhitelist: list[UUID]) \
+        @query.field("_internal_noauth_getSemanticallySimilarEntities")
+        async def get_semantically_similar_entities(parent, info, entityId: UUID,
+                                                    count: int, contentWhitelist: list[UUID],
+                                                    excludeEntitiesWithSameParent: bool) \
                 -> list[dto.SemanticSearchResultDto]:
-            return ai_service.get_semantically_similar_media_record_segments(mediaRecordSegmentId, count,
-                                                                             mediaRecordBlacklist, mediaRecordWhitelist)
+            return await ai_service.get_semantically_similar_entities(entityId, count, contentWhitelist)
 
         @query.field("_internal_noauth_getMediaRecordLinksForContent")
         def get_media_record_links_for_content(parent, info, contentId: UUID) \

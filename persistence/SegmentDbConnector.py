@@ -47,7 +47,7 @@ class SegmentDbConnector:
         self.db_connection.execute(
             """
             CREATE TABLE IF NOT EXISTS assessment_segments (
-                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                task_id uuid PRIMARY KEY,
                 assessment_id uuid,
                 text text,
                 embedding vector(1024)
@@ -91,18 +91,29 @@ class SegmentDbConnector:
                   """,
             params=(screen_text, transcript, media_record_id, start_time, thumbnail, title, embedding))
 
-    def insert_assessment_segment(self, assessment_id: UUID, textual_representation: str, embedding: Tensor) -> None:
+    def upsert_assessment_segment(self,
+                                  task_id: UUID,
+                                  assessment_id: UUID,
+                                  textual_representation: str,
+                                  embedding: Tensor) -> None:
+        # Use an upsert here instead of a regular insert because the primary key of the table isn't auto-generated but
+        # instead manually set. Not using an upsert might result in exceptions in case we process something twice.
         self.db_connection.execute(
             query=
             """
             INSERT INTO assessment_segments (
+                task_id,
                 assessment_id,
                 textual_representation,
                 embedding
             )
-            VALUES (%s, %s, %s);
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (task_id, assessment_id) 
+            DO UPDATE SET 
+                textual_representation = EXCLUDED.textual_representation,
+                embedding = EXCLUDED.embedding;
             """,
-            params=(assessment_id, textual_representation, embedding)
+            params=(task_id, assessment_id, textual_representation, embedding)
         )
 
     def delete_assessment_segments_by_assessment_id(self, assessment_id: UUID) -> list[AssessmentSegmentEntity]:
@@ -204,208 +215,105 @@ class SegmentDbConnector:
 
     def get_top_segments_by_embedding_distance(self, query_embedding: Tensor,
                                                count: int,
-                                               media_record_id_blacklist: list[UUID],
-                                               media_record_id_whitelist: list[UUID],
-                                               assessment_id_blacklist: list[UUID],
-                                               assessment_id_whitelist: list[UUID]) \
+                                               parent_id_whitelist: list[UUID]) \
             -> list[SemanticSearchResultEntity]:
         # sql query to get the closest embeddings to the query embedding, both from the video and document tables
         query = """
                     WITH document_results AS (
                         SELECT
-                            id,
-                            media_record_id,
-                            NULL::uuid AS assessment_id,
+                            *,
                             'document' AS source,
-                            page,
-                            NULL::integer AS start_time,
-                            text,
-                            NULL::text AS transcript,
-                            title,
-                            thumbnail,
-                            embedding,
                             embedding <=> %(query_embedding)s AS score
                         FROM document_segments
-                        WHERE media_record_id = ANY(%(mediaRecordWhitelist)s) AND NOT media_record_id = ANY(%(mediaRecordBlacklist)s)
+                        WHERE media_record_id = ANY(%(parentIdWhitelist)s)
                     ),
                     video_results AS (
                         SELECT 
-                            id,
-                            media_record_id,
-                            NULL::uuid AS assessment_id,
+                            *,
                             'video' AS source,
-                            NULL::integer AS page,
-                            start_time,
-                            text,
-                            transcript,
-                            title,
-                            thumbnail,
-                            embedding,
                             embedding <=> %(query_embedding)s AS score
                         FROM video_segments
-                        WHERE media_record_id = ANY(%(mediaRecordWhitelist)s) AND NOT media_record_id = ANY(%(mediaRecordBlacklist)s)
+                        WHERE media_record_id = ANY(%(parentIdWhitelist)s)
                     ),
                     assessment_results AS (
-                        SELECT
-                            id,
-                            NULL::uuid AS media_record_id,
-                            assessment_id,
-                            'assessment' AS source,
-                            NULL::integer AS page,
-                            NULL::integer AS start_time,
-                            text,
-                            NULL::text AS transcript,
-                            NULL::text AS title,
-                            NULL:bytea AS thumbnail,
-                            embedding,
-                            embedding <=> %(query_embedding)s AS score
-                        FROM assessment_segments
-                        WHERE assessment_id = ANY(%(assessmentWhitelist)s) AND NOT assessment_id = ANY(%(assessmentWhitelist)s)
-                    ),
-                    results AS (
-                        SELECT * FROM document_results
-                        UNION ALL
-                        SELECT * FROM video_results
-                        UNION ALL
-                        SELECT * FROM assessment_results
+                        SELECT assessment_id, MIN(score), 'assessment' As source
+                        FROM (
+                            SELECT
+                                *,
+                                embedding <=> %(query_embedding)s AS score
+                            FROM assessment_segments
+                            WHERE assessment_id = ANY(%(parentIdWhitelist)s)
+                        )
+                        GROUP BY assessment_id
                     )
-                    SELECT * FROM results ORDER BY score LIMIT %(count)s
+                    SELECT * 
+                    FROM document_results NATURAL FULL JOIN video_results NATURAL FULL JOIN assessment_results 
+                    ORDER BY score LIMIT %(count)s
                 """
 
         query_results = self.db_connection.execute(query, {
             "query_embedding": query_embedding,
             "count": count,
-            "mediaRecordBlacklist": media_record_id_blacklist,
-            "mediaRecordWhitelist": media_record_id_whitelist,
-            "assessmentWhitelist": assessment_id_whitelist,
-            "assessmentBlacklist": assessment_id_blacklist,
+            "parentIdWhitelist": parent_id_whitelist,
         }).fetchall()
 
-        return [SemanticSearchResultEntity(
-            x["score"],
-            SegmentDbConnector.__media_record_segment_query_result_to_object(x)
-        ) for x in query_results]
+        return [SegmentDbConnector.__entity_semantic_search_query_result_to_object(x) for x in query_results]
 
-    def get_record_segments_by_media_record_ids(self, media_record_ids: list[UUID]) \
+    def get_media_record_segments_by_media_record_ids(self, media_record_ids: list[UUID]) \
             -> list[DocumentSegmentEntity | VideoSegmentEntity]:
         query = """
                 WITH document_results AS (
                     SELECT
-                        id,
-                        media_record_id,
-                        'document' AS source,
-                        page,
-                        NULL::integer AS start_time,
-                        NULL::text AS transcript,
-                        text,
-                        thumbnail,
-                        title,
-                        embedding
+                        *,
+                        'document' AS source
                     FROM document_segments
                     WHERE media_record_id = ANY(%(mediaRecordIds)s)
                 ),
                 video_results AS (
                     SELECT 
-                        id,
-                        media_record_id,
-                        'video' AS source,
-                        NULL::integer AS page,
-                        start_time,
-                        transcript,
-                        text,
-                        thumbnail,
-                        title,
-                        embedding
+                        *,
+                        'video' AS source
                     FROM video_segments
                     WHERE media_record_id = ANY(%(mediaRecordIds)s)
                 ),
-                results AS (
-                    SELECT * FROM document_results
-                    UNION ALL
-                    SELECT * FROM video_results
-                )
-                SELECT * FROM results
+                SELECT * FROM document_results NATURAL FULL JOIN video_results;
                 """
         return self.__get_record_segments_with_query(query, {"mediaRecordIds": media_record_ids})
 
-    def get_all_record_segments(self) \
-            -> list[DocumentSegmentEntity | VideoSegmentEntity]:
+    def get_all_media_record_segments(self) -> list[EntitySegmentEntity]:
         query = """
-                WITH document_results AS (
-                    SELECT
-                        id,
-                        media_record_id,
-                        'document' AS source,
-                        page,
-                        NULL::integer AS start_time,
-                        NULL::text AS transcript,
-                        text,
-                        thumbnail,
-                        title,
-                        embedding
-                    FROM document_segments
-                ),
-                video_results AS (
-                    SELECT 
-                        id,
-                        media_record_id,
-                        'video' AS source,
-                        NULL::integer AS page,
-                        start_time,
-                        transcript,
-                        text,
-                        thumbnail,
-                        title,
-                        embedding
-                    FROM video_segments
-                ),
-                results AS (
-                    SELECT * FROM document_results
-                    UNION ALL
-                    SELECT * FROM video_results
-                )
-                SELECT * FROM results
+                SELECT * FROM (
+                    (SELECT *, 'document' AS source FROM document_segments) AS t1
+                    NATURAL FULL JOIN
+                    (SELECT *, 'video' AS source FROM video_segments) AS t2
+                );
                 """
         return self.__get_record_segments_with_query(query, {})
 
-    def get_record_segments_by_ids(self, segment_ids: list[UUID]) -> list[DocumentSegmentEntity | VideoSegmentEntity]:
+    def get_entity_segments_by_ids(self, segment_ids: list[UUID]) -> list[EntitySegmentEntity]:
         query = """
                 WITH document_results AS (
                     SELECT
-                        id,
-                        media_record_id,
-                        'document' AS source,
-                        page,
-                        NULL::integer AS start_time,
-                        text,
-                        NULL::text AS transcript,
-                        thumbnail,
-                        title,
-                        embedding
+                        *,
+                        'document' AS source
                     FROM document_segments
                     WHERE id = ANY(%(segmentIds)s)
                 ),
                 video_results AS (
                     SELECT 
-                        id,
-                        media_record_id,
-                        'video' AS source,
-                        NULL::integer AS page,
-                        start_time,
-                        text,
-                        transcript,
-                        thumbnail,
-                        title,
-                        embedding
+                        *,
+                        'video' AS source
                     FROM video_segments
                     WHERE id = ANY(%(segmentIds)s)
                 ),
-                results AS (
-                    SELECT * FROM document_results
-                    UNION ALL
-                    SELECT * FROM video_results
-                )
-                SELECT * FROM results;
+                assessment_results AS (
+                    SELECT
+                        *,
+                        'assessment' AS source
+                    FROM assessment_segments
+                    WHERE id = ANY(%(segmentIds)s)
+                ),
+                SELECT * FROM document_results NATURAL FULL JOIN video_results NATURAL FULL JOIN assessment_results;
                 """
         return self.__get_record_segments_with_query(query, {"segmentIds": segment_ids})
 
@@ -419,6 +327,16 @@ class SegmentDbConnector:
             entities.append(entity)
 
         return entities
+
+    @staticmethod
+    def __entity_semantic_search_query_result_to_object(query_result) -> SemanticSearchResultEntity:
+        if query_result["source"] == "assessment":
+            return SegmentDbConnector.__assessment_semantic_search_query_result_to_object(query_result)
+        else:
+            return MediaRecordSegmentSemanticSearchResultEntity(
+                query_result["score"],
+                SegmentDbConnector.__media_record_segment_query_result_to_object(query_result)
+            )
 
     @staticmethod
     def __media_record_segment_query_result_to_object(query_result) -> DocumentSegmentEntity | VideoSegmentEntity:
@@ -443,6 +361,10 @@ class SegmentDbConnector:
     def __assessment_segment_query_result_to_object(query_result) -> AssessmentSegmentEntity:
         return AssessmentSegmentEntity(query_result["id"], query_result["assessment_id"],
                                        query_result["textual_representation"], query_result["embedding"])
+
+    @staticmethod
+    def __assessment_semantic_search_query_result_to_object(query_result) -> AssessmentSemanticSearchResultEntity:
+        return AssessmentSemanticSearchResultEntity(query_result["score"], query_result["assessment_id"])
 
     @staticmethod
     def __media_record_segment_link_query_result_to_object(query_result) -> MediaRecordSegmentLinkEntity:
