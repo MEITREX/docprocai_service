@@ -275,7 +275,7 @@ class SegmentDbConnector:
                         'video' AS source
                     FROM video_segments
                     WHERE media_record_id = ANY(%(mediaRecordIds)s)
-                ),
+                )
                 SELECT * FROM document_results NATURAL FULL JOIN video_results;
                 """
         return self.__get_record_segments_with_query(query, {"mediaRecordIds": media_record_ids})
