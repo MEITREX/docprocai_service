@@ -53,7 +53,10 @@ class GraphQLController:
                                                     count: int, contentWhitelist: list[UUID],
                                                     excludeEntitiesWithSameParent: bool) \
                 -> list[dto.SemanticSearchResultDto]:
-            return await ai_service.get_semantically_similar_entities(segmentId, count, contentWhitelist)
+            return await ai_service.get_semantically_similar_entities(segmentId,
+                                                                      count,
+                                                                      contentWhitelist,
+                                                                      excludeEntitiesWithSameParent)
 
         @query.field("_internal_noauth_getMediaRecordLinksForContent")
         def get_media_record_links_for_content(parent, info, contentId: UUID) \
