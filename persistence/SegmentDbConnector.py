@@ -312,7 +312,7 @@ class SegmentDbConnector:
                         'assessment' AS source
                     FROM assessment_segments
                     WHERE id = ANY(%(segmentIds)s)
-                ),
+                )
                 SELECT * FROM document_results NATURAL FULL JOIN video_results NATURAL FULL JOIN assessment_results;
                 """
         return self.__get_record_segments_with_query(query, {"segmentIds": segment_ids})

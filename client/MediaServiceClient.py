@@ -5,11 +5,9 @@ import gql.transport.aiohttp
 
 
 class MediaServiceClient:
-    def __init__(self):
-        transport = gql.transport.aiohttp.AIOHTTPTransport(url=config.current["media_service_url"])
-        self.__client = gql.Client(transport=transport, fetch_schema_from_transport=True)
-
     async def get_media_record_type_and_download_url(self, document_id: uuid.UUID) -> dict:
+        self.__init_client_if_not_already()
+
         query = gql.gql(
             """
             query GetDocumentDownloadUrl($recordId: UUID!) {
@@ -25,6 +23,8 @@ class MediaServiceClient:
         return result["_internal_noauth_mediaRecordsByIds"][0]
 
     async def get_media_record_ids_of_contents(self, content_ids: list[uuid.UUID]) -> list[uuid.UUID]:
+        self.__init_client_if_not_already()
+
         query = gql.gql(
             """
             query GetMediaRecordIdsOfContent($contentIds: [UUID!]!) {
@@ -44,3 +44,7 @@ class MediaServiceClient:
                 media_records.append(media_record["id"])
 
         return media_records
+
+    def __init_client_if_not_already(self):
+        transport = gql.transport.aiohttp.AIOHTTPTransport(url=config.current["media_service_url"])
+        self.__client = gql.Client(transport=transport, fetch_schema_from_transport=True)
