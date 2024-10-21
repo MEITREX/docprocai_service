@@ -1,19 +1,25 @@
-from pydantic import BaseModel
+from typing import Optional
+
+from peft import PeftModel
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, BitsAndBytesConfig
 import torch
 from lmformatenforcer import JsonSchemaParser
 from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
-import pydantic
 from transformers.pipelines.base import Pipeline
-from peft import PeftModel
 
 
 class LlamaRunner:
-    def __init__(self, model_id: str, lora_id: str):
+    """
+    Class which can be used to load a llama-architecture model (and optionally a LoRA model with it) and perform
+    inference using it.
+    """
+
+    def __init__(self, model_id: str, lora_id: Optional[str]):
         """
         Initializes the llama runner with the specified model.
         :param model_id: huggingface model id or file path to model.
-        :param lora_id: huggingface lora model id or file path to lora model.
+        :param lora_id: If not None, the huggingface lora model id or file path to lora model. If None, no LoRA model
+        is loaded.
         """
         self.model_id = model_id
 
@@ -21,7 +27,9 @@ class LlamaRunner:
 
         tokenizer = AutoTokenizer.from_pretrained(model_id, quantization_config=quantization_config)
         model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
-        #model = PeftModel.from_pretrained(model, lora_id).merge_and_unload()
+
+        if lora_id is not None:
+            model = PeftModel.from_pretrained(model, lora_id).merge_and_unload()
 
         self.pipeline: Pipeline = pipeline(
             "text-generation",
@@ -39,13 +47,18 @@ class LlamaRunner:
             "repetition_penalty": 1.1
         }
 
-    def generate_text(self, prompt: str, answer_schema=None) -> str:
+    def generate_text(self, prompt: str, answer_schema=None, max_new_tokens: int = 3000) -> str:
         if answer_schema is not None:
             parser = JsonSchemaParser(answer_schema)
             prefix_function = build_transformers_prefix_allowed_tokens_fn(self.pipeline.tokenizer, parser)
-            result = self.pipeline(prompt, prefix_allowed_tokens_fn=prefix_function, max_new_tokens=3000, **self.__hyperparameters)
+            result = self.pipeline(prompt,
+                                   prefix_allowed_tokens_fn=prefix_function,
+                                   max_new_tokens=max_new_tokens,
+                                   **self.__hyperparameters)
         else:
-            result = self.pipeline(prompt, max_new_tokens=500, **self.__hyperparameters)
+            result = self.pipeline(prompt,
+                                   max_new_tokens=max_new_tokens,
+                                   **self.__hyperparameters)
 
         return result[0]["generated_text"]
 

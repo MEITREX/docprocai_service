@@ -14,6 +14,9 @@ class LectureLlmGenerator:
         self.__llama_runner = LlamaRunner(config.current["lecture_llm_generator"]["base_model_path"],
                                           config.current["lecture_llm_generator"]["lora_model_path"])
 
+        self.__summary_answer_schema = (
+            pydantic.RootModel[Annotated[list[str], Len(min_length=1, max_length=5)]].model_json_schema())
+
     def generate_titles_for_video(self, video_data: VideoData) -> None:
         """
         Uses an LLM to generate appropriate titles for the segments of the passed videos. Modifies the title field in
@@ -101,7 +104,7 @@ class LectureLlmGenerator:
             except ValueError as e:
                 print("Error while parsing LLM answer json.", e)
 
-    def generate_summary_for_video(self, video_data: VideoData):
+    def generate_summary_for_video(self, video_data: VideoData) -> None:
         json_input = [{
             "start_time": x.start_time,
             "transcript": x.transcript,
@@ -120,13 +123,29 @@ class LectureLlmGenerator:
                 ```<|eot_id|><|start_header_id|>assistant<|end_header_id|>
                 """.format(json_input=json.dumps(json_input, indent=4, ensure_ascii=False))
 
-        answer_schema = pydantic.RootModel[Annotated[list[str], Len(min_length=1, max_length=5)]].model_json_schema()
-        answer_json = self.__generate_answer_json(prompt, answer_schema)
-        return answer_json
+        answer_json = self.__generate_answer_json(prompt, self.__summary_answer_schema)
+        video_data.summary = answer_json
 
-    def generate_summary_for_document(self, document_data: DocumentData):
-        # TODO: Document summarization
-        pass
+    def generate_summary_for_document(self, document_data: DocumentData) -> None:
+        json_input = [{
+            "page_no": x.page_number,
+            "text": x.text
+        } for x in document_data.pages]
+
+        prompt = """
+                <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+                You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+                I have an input JSON file I need to process. It contains an array, where each element is a page of a lecture's PDF document. Each element contains the keys "page_no", which denotes the index of the page in the document, and "text", the text on the page as detected by OCR. The text might contain inaccuracies due to the nature of STT and OCR. Please create a JSON file containing just an array of strings, the strings should be 1 to 5 bullet points to summarize the contents of the video. Remember to answer only with a JSON file. This is the input JSON:
+
+                ```
+                {json_input}
+                ```<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+                """.format(json_input=json.dumps(json_input, indent=4, ensure_ascii=False))
+
+        answer_json = self.__generate_answer_json(prompt, self.__summary_answer_schema)
+        document_data.summary = answer_json
 
     def __generate_answer_json(self, prompt, answer_schema: dict[str, any]) -> any:
         generated_text = self.__llama_runner.generate_text(prompt, answer_schema)
