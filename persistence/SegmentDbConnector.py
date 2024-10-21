@@ -236,7 +236,7 @@ class SegmentDbConnector:
                         WHERE media_record_id = ANY(%(parentIdWhitelist)s)
                     ),
                     assessment_results AS (
-                        SELECT assessment_id, MIN(score), 'assessment' As source
+                        SELECT assessment_id, MIN(score) as score, 'assessment' As source
                         FROM (
                             SELECT
                                 *,
@@ -318,12 +318,12 @@ class SegmentDbConnector:
         return self.__get_record_segments_with_query(query, {"segmentIds": segment_ids})
 
     def __get_record_segments_with_query(self, query: str, params: dict) \
-            -> list[DocumentSegmentEntity | VideoSegmentEntity]:
+            -> list[EntitySegmentEntity]:
         query_results = self.db_connection.execute(query=query, params=params).fetchall()
 
         entities = []
         for x in query_results:
-            entity = SegmentDbConnector.__media_record_segment_query_result_to_object(x)
+            entity = SegmentDbConnector.__entity_segment_query_result_to_object(x)
             entities.append(entity)
 
         return entities
@@ -337,6 +337,13 @@ class SegmentDbConnector:
                 query_result["score"],
                 SegmentDbConnector.__media_record_segment_query_result_to_object(query_result)
             )
+
+    @staticmethod
+    def __entity_segment_query_result_to_object(query_result) -> EntitySegmentEntity:
+        if query_result["source"] == "assessment":
+            return SegmentDbConnector.__assessment_segment_query_result_to_object(query_result)
+        else:
+            return SegmentDbConnector.__media_record_segment_query_result_to_object(query_result)
 
     @staticmethod
     def __media_record_segment_query_result_to_object(query_result) -> DocumentSegmentEntity | VideoSegmentEntity:

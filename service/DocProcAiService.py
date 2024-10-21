@@ -480,7 +480,12 @@ class DocProcAiService:
         """
 
         # firstly, we need to get the entity segment we want to find similar ones for
-        entity_segment = self.segment_database.get_entity_segments_by_ids([entity_id])[0]
+        segment_query_res = self.segment_database.get_entity_segments_by_ids([entity_id])
+
+        if len(segment_query_res) < 1:
+            raise ValueError("Could not find segment with ID " + str(entity_id))
+
+        entity_segment = segment_query_res[0]
 
         parent_whitelist = await self.__generate_segment_parent_whitelist(content_whitelist)
 
@@ -490,7 +495,7 @@ class DocProcAiService:
             elif isinstance(entity_segment, DocumentSegmentEntity):
                 parent_id = entity_segment.media_record_id
             elif isinstance(entity_segment, VideoSegmentEntity):
-                parent_id =entity_segment.media_record_id
+                parent_id = entity_segment.media_record_id
             else:
                 raise NotImplementedError("Tried to fetch parent id of unknown entity segment type.")
 
