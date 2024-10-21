@@ -104,13 +104,13 @@ class SegmentDbConnector:
             INSERT INTO assessment_segments (
                 task_id,
                 assessment_id,
-                textual_representation,
+                text,
                 embedding
             )
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (task_id, assessment_id) 
             DO UPDATE SET 
-                textual_representation = EXCLUDED.textual_representation,
+                text = EXCLUDED.text,
                 embedding = EXCLUDED.embedding;
             """,
             params=(task_id, assessment_id, textual_representation, embedding)
@@ -360,7 +360,7 @@ class SegmentDbConnector:
     @staticmethod
     def __assessment_segment_query_result_to_object(query_result) -> AssessmentSegmentEntity:
         return AssessmentSegmentEntity(query_result["task_id"], query_result["assessment_id"],
-                                       query_result["textual_representation"], query_result["embedding"])
+                                       query_result["text"], query_result["embedding"])
 
     @staticmethod
     def __assessment_semantic_search_query_result_to_object(query_result) -> AssessmentSemanticSearchResultEntity:
