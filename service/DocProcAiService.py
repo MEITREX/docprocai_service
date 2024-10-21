@@ -156,7 +156,10 @@ class DocProcAiService:
             else:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
-            self.__generate_tags_for_media_records()
+            try:
+                self.__generate_tags_for_media_records()
+            except ValueError as e:
+                _logger.exception(e)
 
             self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
                                                                        IngestionEntityTypeDbType.MEDIA_RECORD,
@@ -571,10 +574,9 @@ class DocProcAiService:
                 continue
 
             background_task_item = self._background_task_queue.get()
-            try:
-                asyncio.run(background_task_item.task())
-            except Exception as e:
-                _logger.exception(e)
+
+            asyncio.run(background_task_item.task())
+
 
     @staticmethod
     def __match_segment_against_other_media_records(linking_results: dict[UUID, UUID],
