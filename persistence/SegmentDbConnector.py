@@ -311,7 +311,7 @@ class SegmentDbConnector:
                         *,
                         'assessment' AS source
                     FROM assessment_segments
-                    WHERE id = ANY(%(segmentIds)s)
+                    WHERE task_id = ANY(%(segmentIds)s)
                 )
                 SELECT * FROM document_results NATURAL FULL JOIN video_results NATURAL FULL JOIN assessment_results;
                 """
@@ -359,7 +359,7 @@ class SegmentDbConnector:
 
     @staticmethod
     def __assessment_segment_query_result_to_object(query_result) -> AssessmentSegmentEntity:
-        return AssessmentSegmentEntity(query_result["id"], query_result["assessment_id"],
+        return AssessmentSegmentEntity(query_result["task_id"], query_result["assessment_id"],
                                        query_result["textual_representation"], query_result["embedding"])
 
     @staticmethod
