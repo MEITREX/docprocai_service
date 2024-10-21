@@ -416,6 +416,7 @@ class DocProcAiService:
                     "state": dto.AiEntityProcessingStateDto.UNKNOWN,
                     "queuePosition": None
                 })
+                continue
 
             match query_result.ingestion_state:
                 case IngestionStateDbType.PROCESSING:
