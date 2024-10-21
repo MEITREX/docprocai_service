@@ -108,7 +108,7 @@ class SegmentDbConnector:
                 embedding
             )
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (task_id, assessment_id) 
+            ON CONFLICT (task_id) 
             DO UPDATE SET 
                 text = EXCLUDED.text,
                 embedding = EXCLUDED.embedding;
