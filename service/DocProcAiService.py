@@ -571,7 +571,10 @@ class DocProcAiService:
                 continue
 
             background_task_item = self._background_task_queue.get()
-            asyncio.run(background_task_item.task())
+            try:
+                asyncio.run(background_task_item.task())
+            except Exception as e:
+                _logger.error(e)
 
     @staticmethod
     def __match_segment_against_other_media_records(linking_results: dict[UUID, UUID],
