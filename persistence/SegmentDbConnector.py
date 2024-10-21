@@ -254,7 +254,7 @@ class SegmentDbConnector:
         query_results = self.db_connection.execute(query, {
             "query_embedding": query_embedding,
             "count": count,
-            "parentIdWhitelist": parent_id_whitelist,
+            "parentIdWhitelist": [str(x) for x in parent_id_whitelist],
         }).fetchall()
 
         return [SegmentDbConnector.__entity_semantic_search_query_result_to_object(x) for x in query_results]
