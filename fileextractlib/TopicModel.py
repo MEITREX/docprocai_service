@@ -40,8 +40,8 @@ class TopicModel:
 
 
 
-        if len(self.docs) < 2:
-            _logger.info("At least 2 documents required for topic model")
+        if len(self.docs) < 11:
+            _logger.info("More documents needed to create topic model.")
             return
 
         embeddings = np.array(embeddings)
@@ -65,8 +65,8 @@ class TopicModel:
         print("Model has been fit")
 
     def add_tags_to_media_records(self, record_segments, media_records):
-        if len(self.docs) < 2:
-            _logger.info("At least 2 documents required for topic model")
+        if len(self.docs) < 11:
+            _logger.info("Topic model wasn't created. More documents needed.")
             return
         document_info = self.model.get_document_info(self.docs)
         mediarecords_with_tags = {}
