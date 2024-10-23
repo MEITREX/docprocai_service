@@ -149,6 +149,22 @@ class VideoProcessor:
                     current_segment_image = image
                     current_segment_cropped_image = cropped_image
 
+        # add the last segment
+        with io.BytesIO() as enhanced_image_bytes:
+                        # Increase contrast on the screenshot image, this improves OCR performance for colored text
+                        enhanced_image = PIL.ImageEnhance.Contrast(current_segment_image).enhance(3.0)
+                        # Save image bytes
+                        enhanced_image.save(enhanced_image_bytes, format="PNG")
+                        enhanced_image_bytes.seek(0)
+                        # Perform OCR using tika
+                        tika_res = tika.parser.from_buffer(enhanced_image_bytes)["content"]
+                        if tika_res is not None:
+                            current_segment.screen_text = tika_res.strip()
+                        else:
+                            current_segment.screen_text = ""
+        current_segment.thumbnail = current_segment_image
+        segments.append(current_segment)
+
         video_data = VideoData(vtt, segments)
 
         return video_data
