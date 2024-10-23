@@ -21,6 +21,7 @@ class LlamaRunner:
         :param lora_id: If not None, the huggingface lora model id or file path to lora model. If None, no LoRA model
         is loaded.
         """
+
         self.model_id = model_id
 
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
@@ -35,30 +36,22 @@ class LlamaRunner:
             "text-generation",
             model=model,
             tokenizer=tokenizer,
-            model_kwargs={"torch_dtype": torch.bfloat16},
+            model_kwargs={"torch_dtype": torch.bfloat16}
         )
 
-        self.__hyperparameters = {
-            "temperature": 0.7,
-            "top_p": 0.1,
-            "top_k": 40,
-            "typical_p": 1,
-            "min_p": 0,
-            "repetition_penalty": 1.1
-        }
+    def generate_text(self, prompt: str, answer_schema=None, pipeline_args=None) -> str:
+        if pipeline_args is None:
+            pipeline_args = []
 
-    def generate_text(self, prompt: str, answer_schema=None, max_new_tokens: int = 3000) -> str:
         if answer_schema is not None:
             parser = JsonSchemaParser(answer_schema)
             prefix_function = build_transformers_prefix_allowed_tokens_fn(self.pipeline.tokenizer, parser)
             result = self.pipeline(prompt,
                                    prefix_allowed_tokens_fn=prefix_function,
-                                   max_new_tokens=max_new_tokens,
-                                   **self.__hyperparameters)
+                                   **pipeline_args)
         else:
             result = self.pipeline(prompt,
-                                   max_new_tokens=max_new_tokens,
-                                   **self.__hyperparameters)
+                                   **pipeline_args)
 
         return result[0]["generated_text"]
 

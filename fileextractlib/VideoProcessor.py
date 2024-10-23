@@ -91,8 +91,8 @@ class VideoProcessor:
 
             # we crop the image to its center portion because in some videos the
             # lecturer might put other things, e.g. a webcam feed, in the corners
-            cropped_image = image.crop((image.width * 1/6, image.height * 1/10, 
-                                        image.width * 5/6, image.height * 9/10))
+            cropped_image = image.crop((image.width * 1/4, image.height * 1/10,
+                                        image.width * 3/4, image.height * 9/10))
 
             if current_segment is None:
                 # if this is the first image, we need to create a new segment

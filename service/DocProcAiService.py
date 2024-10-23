@@ -33,10 +33,6 @@ from utils.SortedPriorityQueue import SortedPriorityQueue
 
 _logger = logging.getLogger(__name__)
 
-# only import the llm generator if llm features are enabled in the config
-if config.current["lecture_llm_generator"]["enabled"]:
-    from fileextractlib.LectureLlmGenerator import LectureLlmGenerator
-
 
 class DocProcAiService:
     def __init__(self):
@@ -61,8 +57,10 @@ class DocProcAiService:
         self.__lecture_pdf_embedding_generator: LectureDocumentEmbeddingGenerator = LectureDocumentEmbeddingGenerator()
         self.__lecture_video_embedding_generator: LectureVideoEmbeddingGenerator = LectureVideoEmbeddingGenerator()
 
-        # only create a llm generator object if llm generation is enabled in the config
-        if config.current["lecture_llm_generator"]["enabled"]:
+        # only import & create a llm generator object if llm generation is enabled in the config
+        if (config.current["lecture_llm_generator"]["segment_title_generator"]["enabled"] or
+                config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]):
+            from fileextractlib.LectureLlmGenerator import LectureLlmGenerator
             self.__lecture_llm_generator: LectureLlmGenerator = LectureLlmGenerator()
 
         # the "queue" we use to keep track of which items
@@ -113,7 +111,7 @@ class DocProcAiService:
                                                                   None,
                                                                   segment.embedding)
 
-                if config.current["lecture_llm_generator"]["enabled"]:
+                if config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]:
                     # generate and store a summary of this media record
                     self.__lecture_llm_generator.generate_summary_for_document(document_data)
 
@@ -130,7 +128,7 @@ class DocProcAiService:
                 self.__lecture_video_embedding_generator.generate_embeddings(video_data.segments)
 
                 # generate titles for the video's segments if llm features enabled
-                if config.current["lecture_llm_generator"]["enabled"]:
+                if config.current["lecture_llm_generator"]["segment_title_generator"]["enabled"]:
                     self.__lecture_llm_generator.generate_titles_for_video(video_data)
                 else:
                     # otherwise set empty data/placeholders
@@ -145,7 +143,7 @@ class DocProcAiService:
                                                                segment.start_time, thumbnail_bytes.getvalue(),
                                                                segment.title, segment.embedding)
 
-                if config.current["lecture_llm_generator"]["enabled"]:
+                if config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]:
                     # generate and store a summary of this media record
                     self.__lecture_llm_generator.generate_summary_for_video(video_data)
 
@@ -594,7 +592,7 @@ class DocProcAiService:
 
         # TODO: Only crop if video
         cropped_segment_thumbnail = segment_thumbnail.crop((
-            segment_thumbnail.width * 1 / 6, segment_thumbnail.height * 1 / 10,
+            segment_thumbnail.width * 1 / 4, segment_thumbnail.height * 3 / 4,
             segment_thumbnail.width * 5 / 6, segment_thumbnail.height * 9 / 10))
 
         image_template_matcher = ImageTemplateMatcher(
@@ -621,7 +619,6 @@ class DocProcAiService:
                     (int(other_segment_thumbnail.width * size_ratio), segment_thumbnail.height))
 
                 # use the image template matcher to try to match the thumbnails
-                # TODO: Only use center portion of image for matching
                 similarity = image_template_matcher.match(other_segment_thumbnail)
                 if similarity > max_similarity:
                     max_similarity = similarity

@@ -17,6 +17,12 @@ video_segmentation:
   # has been reached, the change is ignored
   minimum_segment_length: 15
 
+# Settings pertaining to the text embedding generation step during the content processing pipeline
+text_embedding:
+  # Path (or huggingface repository name) of the sentence transformer model which should be used for generation of the
+  # text embeddings of the ingested documents
+  model_path: "./llm_data/models/gte-large-en-v1.5"
+
 # Settings pertaining to the content linking step during the content processing pipeline. Content linking is the process
 # of analyzing all documents and videos of a content object and checking which parts of the documents should be linked,
 # e.g. a timestamp in a lecture recording with the respective page in the lecture's PDF
@@ -31,11 +37,85 @@ content_linking:
 # Settings pertaining to the llm generation steps (title generation, summarization) during the content
 # processing pipeline
 lecture_llm_generator:
-  # If true, llm features are enabled in the processing pipeline. If false, these steps are skipped in the pipeline
-  # and relevant data attributes replaced by placeholders or left unset
-  # Default: true
-  enabled: true
-  # path to the folder containing the llm base model which should be used for inference
-  base_model_path: "./llm_data/models/Meta-Llama-3.1-8B-Instruct"
-  # path to the folder containing the llm lora adapter which should be used for inference
-  lora_model_path: "./llm_data/loras/llama-3-1-8B-instruct-titles"
+  # If set to true, the models will be kept loaded in memory at all times. If false, models will be re-loaded each time
+  # data is processed. Keeping models loaded at all times significantly increases RAM & VRAM usage, especially if
+  # different models are used for title & summary generation, because this means memory of the machine needs to be large
+  # enough to keep 2 models loaded simultaneously. If both the base model path and lora path of the two llm generators
+  # are identical, the model is automatically only loaded once to save memory.
+  keep_models_loaded: false
+  # Settings pertaining to the generation of titles for video segments
+  segment_title_generator:
+    # If true, llm features are enabled in the processing pipeline. If false, these steps are skipped in the pipeline
+    # and relevant data attributes replaced by placeholders or left unset
+    # Default: true
+    enabled: true
+    # path to the folder containing the llm base model, or the model's huggingface repository name which should be used
+    # for inference
+    base_model_path: "./llm_data/models/Meta-Llama-3.1-8B-Instruct"
+    # path to the folder containing the llm lora adapter which should be used for inference
+    lora_model_path: "./llm_data/loras/llama-3-1-8B-instruct-titles"
+    # Hyperparameters passed to the model at inference-time
+    hyperparameters:
+      max_new_tokens: 2000
+      temperature: 0.7
+      top_p: 0.1
+      top_k: 40
+      typical_p: 1
+      min_p: 0
+      repetition_penalty: 1.2
+    # The prompt given to the model for this task. {json_input} is automatically replaced by a stringified JSON array
+    # containing an entry for each segment extracted from the video. {json_schema} is automatically replaced by a
+    # JSON schema definition of the expected output the LLM should give.
+    prompt: |
+      <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+      You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+      I have an input JSON file I need to process. It contains an array, where each element is a snippet of a lecture video. Each element contains the keys "start_time", which denotes the start time of the snippet in seconds after video start, a "transcript" of the spoken text, and "screen_text", the text on screen as detected by OCR. The transcript and screen_text might contain inaccuracies due to the nature of STT and OCR. The video was split into snippets by detecting when the screen changes by a significant amount. Please create a JSON file containing just an array of strings, the list of strings should consist of 1 to 5 bullet points to summarize the contents of the video. Each bullet point should at most be 2 sentences long. Remember to answer only with a JSON file.
+
+      Your answer should adhere to the following JSON schema:
+      ```
+      {json_schema}
+      ```
+
+      The input data:
+      ```
+      {json_input}
+      ```<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+  # Settings pertaining to the generation of summaries for documents
+  document_summary_generator:
+    # If true, llm features are enabled in the processing pipeline. If false, these steps are skipped in the pipeline
+    # and relevant data attributes replaced by placeholders or left unset
+    # Default: true
+    enabled: true
+    # path to the folder containing the llm base model, or the model's huggingface repository name which should be used
+    # for inference
+    base_model_path: "./llm_data/models/Meta-Llama-3.1-8B-Instruct"
+    # path to the folder containing the llm lora adapter which should be used for inference
+    lora_model_path: "./llm_data/loras/llama-3-1-8B-instruct-titles"
+    # Hyperparameters passed to the model at inference-time
+    hyperparameters:
+      max_new_tokens: 300
+      temperature: 0.6
+      top_p: 0.1
+      top_k: 40
+      typical_p: 1
+      min_p: 0
+      repetition_penalty: 1.2
+      exponential_decay_length_penalty: !!python/tuple [300,2.5]
+    # The prompt given to the model for this task. {text_input} is automatically replaced by the extracted text from
+    # the document.
+    prompt: |
+      <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+      You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+      The input data:
+      ```
+      {text_input}
+      ```
+
+      I have some text extracted from the document of a lecture. Please create a very compact overview/table of contents about which topics are covered in this lecture. Your response must be under 800 characters in length.<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+      Table of contents of the covered topics:
