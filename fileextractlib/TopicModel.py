@@ -1,15 +1,13 @@
+import logging
+
 import numpy as np
 from bertopic import BERTopic
+from bertopic.representation import KeyBERTInspired
 from bertopic.representation import MaximalMarginalRelevance
 from bertopic.vectorizers import ClassTfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
-from bertopic.representation import KeyBERTInspired
 
-from persistence.MediaRecordInfoDbConnector import MediaRecordInfoDbConnector
-from persistence.SegmentDbConnector import SegmentDbConnector
 from persistence.entities import DocumentSegmentEntity, VideoSegmentEntity
-import logging
-import psycopg
 
 _logger = logging.getLogger(__name__)
 
@@ -27,8 +25,6 @@ class TopicModel:
 
     def create_topic_model(self):
         embeddings = []
-
-        _logger.info("Adding segments")
 
         for entity in self.record_segments:
             if isinstance(entity, DocumentSegmentEntity):
@@ -95,33 +91,3 @@ class TopicModel:
             i += 1
 
         return mediarecords_with_tags
-
-if __name__ == "__main__":
-
-    print("Connecting to DB")
-    database_connection = psycopg.connect(
-        "user=root password=root host=localhost port=5432 dbname=docprocai_service",
-        autocommit=True,
-        row_factory=psycopg.rows.dict_row
-    )
-
-    segment_database = SegmentDbConnector(database_connection)
-    media_record_info_database = MediaRecordInfoDbConnector(database_connection)
-
-    print("Loading segments and media records")
-
-    record_segments = segment_database.get_all_media_record_segments()
-    media_records = media_record_info_database.get_all_media_records()
-
-    topic_model = TopicModel(record_segments, media_records)
-
-    print("Running Topic model")
-    topic_model.create_topic_model()
-
-    media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
-    if media_records_with_tags is not None:
-        for mrid, tags in media_records_with_tags.items():
-            media_record_info_database.update_media_record_tags(mrid, list(tags))
-
-    print("Done")
-
