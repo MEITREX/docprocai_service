@@ -1,15 +1,16 @@
+import logging
+import time
+
 import numpy as np
+import psycopg
 from bertopic import BERTopic
 from bertopic.representation import MaximalMarginalRelevance
 from bertopic.vectorizers import ClassTfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
-from bertopic.representation import KeyBERTInspired
 
 from persistence.MediaRecordInfoDbConnector import MediaRecordInfoDbConnector
 from persistence.SegmentDbConnector import SegmentDbConnector
 from persistence.entities import DocumentSegmentEntity, VideoSegmentEntity
-import logging
-import psycopg
 
 _logger = logging.getLogger(__name__)
 
@@ -28,8 +29,6 @@ class TopicModel:
     def create_topic_model(self):
         embeddings = []
 
-        _logger.info("Adding segments")
-
         for entity in self.record_segments:
             if isinstance(entity, DocumentSegmentEntity):
                 self.docs.append(entity.text)
@@ -38,20 +37,17 @@ class TopicModel:
                 self.docs.append(entity.transcript)
                 embeddings.append(entity.embedding)
 
-
-
         if len(self.docs) < 11:
             _logger.info("More documents needed to create topic model.")
             return
 
         embeddings = np.array(embeddings)
-
         vectorizer_model = CountVectorizer(stop_words="english", ngram_range=(1, 3))
         ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True, bm25_weighting=True)
-        mmr = MaximalMarginalRelevance(diversity=0.2)
-        kbi = KeyBERTInspired()
+        mmr = MaximalMarginalRelevance(diversity=0.3)
 
-        representation_models = [mmr, kbi]
+
+        representation_models = mmr
 
         self.model = BERTopic(
             min_topic_size=7,
@@ -61,8 +57,6 @@ class TopicModel:
         )
 
         self.model.fit_transform(self.docs, embeddings)
-
-        print("Model has been fit")
 
     def add_tags_to_media_records(self, record_segments, media_records):
         if len(self.docs) < 11:
@@ -88,7 +82,7 @@ class TopicModel:
 
             tags = set()
             if mediarecords_with_tags.get(mediarecord_id) is not None:
-                tags = mediarecords_with_tags.get(mediarecord_id)
+               tags = mediarecords_with_tags.get(mediarecord_id)
             tags.update(set(document_info['Representation'].iat[i]))
 
             mediarecords_with_tags.update({mediarecord_id: tags})
@@ -97,6 +91,8 @@ class TopicModel:
         return mediarecords_with_tags
 
 if __name__ == "__main__":
+
+    star = time.time()
 
     print("Connecting to DB")
     database_connection = psycopg.connect(
@@ -122,6 +118,9 @@ if __name__ == "__main__":
     if media_records_with_tags is not None:
         for mrid, tags in media_records_with_tags.items():
             media_record_info_database.update_media_record_tags(mrid, list(tags))
+    end = time.time()
+    print("Done in " + str(end - star) + " seconds")
 
-    print("Done")
+
+
 
