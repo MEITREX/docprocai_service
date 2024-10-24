@@ -29,9 +29,9 @@ class VideoData:
     Represents a video's data, containing the captions and the sections of the video.
     """
 
-    def __init__(self, vtt: WebVTT, segments: list[VideoSegmentData], summary=None):
+    def __init__(self, vtt: WebVTT, segments: list[VideoSegmentData], summary: list[str] = None):
         if summary is None:
             summary = []
         self.vtt: WebVTT = vtt
         self.segments: list[VideoSegmentData] = segments
-        self.summary = summary
+        self.summary: list[str] = summary
