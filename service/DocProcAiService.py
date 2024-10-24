@@ -183,9 +183,10 @@ class DocProcAiService:
         topic_model.create_topic_model()
         _logger.info("Finished running topic model")
         media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
-        for media_record_id, tags in media_records_with_tags.items():
-            self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
-        _logger.info("Generated tags for media records.")
+        if media_records_with_tags is not None:
+            for media_record_id, tags in media_records_with_tags.items():
+                self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
+            _logger.info("Generated tags for media records.")
 
     def enqueue_generate_assessment_segments(self,
                                              assessment_id: uuid.UUID,
