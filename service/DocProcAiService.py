@@ -236,7 +236,7 @@ class DocProcAiService:
                                                                 task_information["textualRepresentation"],
                                                                 embedding)
 
-                self.assesment_database.add_assessment_info(assessment_id)
+                self.assesment_database.insert_assessment_info(assessment_id)
 
             try:
                 self.__generate_tags()
