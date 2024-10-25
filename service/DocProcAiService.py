@@ -188,6 +188,10 @@ class DocProcAiService:
 
     def __generate_tags_for_media_records(self, segments, topic_model):
         media_records = self.media_record_info_database.get_all_media_records()
+        if not media_records: # check if media_records is empty
+            _logger.info("No media records found, skipping step")
+            return
+
         media_records_with_tags = topic_model.add_tags_to_media_records(segments, media_records)
         if media_records_with_tags is not None:
             for media_record_id, tags in media_records_with_tags.items():
@@ -196,6 +200,10 @@ class DocProcAiService:
 
     def __generate_tags_for_assessments(self, segments, topic_model):
         assesments = self.assesment_database.get_all_assessments()
+        if not assesments: # check if assessments is empty
+            _logger.info("No assessments found, skipping step")
+            return
+
         assesments_with_tags = topic_model.add_tags_to_assessments(assesments, segments)
 
         if assesments_with_tags is not None:
@@ -225,6 +233,8 @@ class DocProcAiService:
                                                                 assessment_id,
                                                                 task_information["textualRepresentation"],
                                                                 embedding)
+
+                self.assesment_database.add_assessment_info(assessment_id)
 
             self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
                                                                        IngestionEntityTypeDbType.ASSESSMENT,

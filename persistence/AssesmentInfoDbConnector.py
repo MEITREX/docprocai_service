@@ -20,6 +20,15 @@ class AssessmentInfoDbConnector:
             );
             """)
 
+    def add_assessment_info(self, id: UUID):
+        self.db_connection.execute(
+            query="""
+                  INSERT INTO assessments (id)
+                  VALUES (%s)
+                  """,
+            params=(id)
+        )
+
     def get_assessment_tags_by_id(self, assesment_id) -> list[str]:
         query_result = self.db_connection.execute(
             "SELECT tags FROM assessments WHERE id = %s",
