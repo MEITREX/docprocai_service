@@ -28,6 +28,7 @@ from fileextractlib.VideoProcessor import VideoProcessor
 from persistence.IngestionStateDbConnector import IngestionStateDbConnector
 from persistence.MediaRecordInfoDbConnector import MediaRecordInfoDbConnector
 from persistence.SegmentDbConnector import SegmentDbConnector
+from persistence.AssesmentInfoDbConnector import AssessmentInfoDbConnector
 from persistence.entities import *
 from utils.SortedPriorityQueue import SortedPriorityQueue
 
@@ -45,6 +46,7 @@ class DocProcAiService:
         self.segment_database = SegmentDbConnector(self.database_connection)
         self.media_record_info_database = MediaRecordInfoDbConnector(self.database_connection)
         self.ingestion_state_database = IngestionStateDbConnector(self.database_connection)
+        self.assesment_database = AssessmentInfoDbConnector(self.database_connection)
 
         # graphql client for interacting with the media service
         self.__media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
@@ -173,20 +175,34 @@ class DocProcAiService:
                                                                             ingest_media_record_task,
                                                                             priority))
 
-    def __generate_tags_for_media_records(self):
-        record_segments = self.segment_database.get_all_media_record_segments()
-        media_records = self.media_record_info_database.get_all_media_records()
+    def __generate_tags(self):
+        segments = self.segment_database.get_all_entity_segments()
 
-        topic_model = TopicModel(record_segments, media_records)
+        topic_model = TopicModel(segments)
 
         _logger.info("Running topic model")
         topic_model.create_topic_model()
         _logger.info("Finished running topic model")
-        media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
+        self.__generate_tags_for_media_records(segments, topic_model)
+        self.__generate_tags_for_assessments(segments, topic_model)
+
+    def __generate_tags_for_media_records(self, segments, topic_model):
+        media_records = self.media_record_info_database.get_all_media_records()
+        media_records_with_tags = topic_model.add_tags_to_media_records(segments, media_records)
         if media_records_with_tags is not None:
             for media_record_id, tags in media_records_with_tags.items():
                 self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
             _logger.info("Generated tags for media records.")
+
+    def __generate_tags_for_assessments(self, segments, topic_model):
+        assesments = self.assesment_database.get_all_assessments()
+        assesments_with_tags = topic_model.add_tags_to_assessments(assesments, segments)
+
+        if assesments_with_tags is not None:
+            for assesment_id, tags in assesments_with_tags.items():
+                self.assesment_database.update_assessment_tags(assesment_id, list(tags))
+            _logger.info("Generated tags for assessments.")
+
 
     def enqueue_generate_assessment_segments(self,
                                              assessment_id: uuid.UUID,

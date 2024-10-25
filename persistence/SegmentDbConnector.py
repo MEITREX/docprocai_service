@@ -290,6 +290,19 @@ class SegmentDbConnector:
                 """
         return self.__get_record_segments_with_query(query, {})
 
+    def get_all_entity_segments(self) -> list[EntitySegmentEntity]:
+        query = """
+                SELECT * FROM (
+                    (SELECT *, 'document' AS source FROM document_segments) AS t1
+                    NATURAL FULL JOIN
+                    (SELECT *, 'video' AS source FROM video_segments) AS t2
+                    NATURAL FULL JOIN 
+                    (SELECT *, 'assessment' AS source FROM assessment_segments) AS t3
+                );
+                """
+        return self.__get_record_segments_with_query(query, {})
+
+
     def get_entity_segments_by_ids(self, segment_ids: list[UUID]) -> list[EntitySegmentEntity]:
         query = """
                 WITH document_results AS (
