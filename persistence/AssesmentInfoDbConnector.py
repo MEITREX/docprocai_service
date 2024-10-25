@@ -20,11 +20,14 @@ class AssessmentInfoDbConnector:
             );
             """)
 
-    def insert_assessment_info(self, id: UUID):
+    def upsert_assessment_info(self, id: UUID):
         self.db_connection.execute(
             query="""
                   INSERT INTO assessments (id, tags)
                   VALUES (%s, %s)
+                  ON CONFLICT (id)
+                  DO UPDATE SET 
+                    tags = EXCLUDED.tags
                   """,
             params=(id, [])
         )
