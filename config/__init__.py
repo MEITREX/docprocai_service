@@ -1,4 +1,4 @@
 import yaml
 
 with open("./config.yaml") as file:
-    current = yaml.safe_load(file)
+    current = yaml.load(file, Loader=yaml.FullLoader)
