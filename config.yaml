@@ -48,7 +48,7 @@ lecture_llm_generator:
     # If true, llm features are enabled in the processing pipeline. If false, these steps are skipped in the pipeline
     # and relevant data attributes replaced by placeholders or left unset
     # Default: true
-    enabled: true
+    enabled: false
     # path to the folder containing the llm base model, or the model's huggingface repository name which should be used
     # for inference
     base_model_path: "./llm_data/models/Meta-Llama-3.1-8B-Instruct"
@@ -88,7 +88,7 @@ lecture_llm_generator:
     # If true, llm features are enabled in the processing pipeline. If false, these steps are skipped in the pipeline
     # and relevant data attributes replaced by placeholders or left unset
     # Default: true
-    enabled: true
+    enabled: false
     # path to the folder containing the llm base model, or the model's huggingface repository name which should be used
     # for inference
     base_model_path: "./llm_data/models/Meta-Llama-3.1-8B-Instruct"
