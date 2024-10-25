@@ -38,7 +38,7 @@ class MediaRecordInfoDbConnector:
 
     def get_media_record_summary_by_media_record_id(self, media_record_id) -> list[str]:
         query_result = self.db_connection.execute(
-            "SELECT summary FROM media_records WHERE media_record_id = %s",
+            "SELECT summary FROM media_records WHERE id = %s",
             (media_record_id,)).fetchone()
 
         if query_result is None:
@@ -58,7 +58,7 @@ class MediaRecordInfoDbConnector:
 
     def get_media_record_tags_by_media_record_id(self, media_record_id) -> list[str]:
         query_result = self.db_connection.execute(
-            "SELECT tags FROM media_records WHERE media_record_id = %s",
+            "SELECT tags FROM media_records WHERE id = %s",
             (media_record_id,)).fetchone()
 
         if query_result is None:
