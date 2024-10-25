@@ -193,7 +193,7 @@ class DocProcAiService:
             _logger.info("No media records found, skipping step")
             return
 
-        media_records_with_tags = topic_model.add_tags_to_media_records(segments, media_records)
+        media_records_with_tags = topic_model.add_tags_to_media_records(segments)
         if media_records_with_tags is not None:
             for media_record_id, tags in media_records_with_tags.items():
                 self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
@@ -206,7 +206,7 @@ class DocProcAiService:
             _logger.info("No assessments found, skipping step")
             return
 
-        assesments_with_tags = topic_model.add_tags_to_assessments(assesments, segments)
+        assesments_with_tags = topic_model.add_tags_to_assessments(segments)
 
         if assesments_with_tags is not None:
             for assesment_id, tags in assesments_with_tags.items():

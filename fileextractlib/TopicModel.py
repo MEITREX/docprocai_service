@@ -8,6 +8,7 @@ from bertopic.representation import MaximalMarginalRelevance
 from bertopic.vectorizers import ClassTfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 
+from persistence.AssesmentInfoDbConnector import AssessmentInfoDbConnector
 from persistence.MediaRecordInfoDbConnector import MediaRecordInfoDbConnector
 from persistence.SegmentDbConnector import SegmentDbConnector
 from persistence.entities import DocumentSegmentEntity, VideoSegmentEntity, AssessmentSegmentEntity
@@ -18,7 +19,7 @@ _logger = logging.getLogger(__name__)
 class TopicModel:
     model = BERTopic()
 
-    def __init__(self, record_segments: list[VideoSegmentEntity| DocumentSegmentEntity| AssessmentSegmentEntity]):
+    def __init__(self, record_segments: list[VideoSegmentEntity | DocumentSegmentEntity | AssessmentSegmentEntity]):
         self.record_segments = []
         self.docs = []
         self.record_segments = record_segments
@@ -58,7 +59,7 @@ class TopicModel:
 
         self.model.fit_transform(self.docs, embeddings)
 
-    def add_tags_to_media_records(self, segments, media_records):
+    def add_tags_to_media_records(self, segments):
         if len(self.docs) < 11:
             _logger.info("Topic model wasn't created. More documents needed.")
             return
@@ -66,16 +67,12 @@ class TopicModel:
         mediarecords_with_tags = {}
 
         i = 0
-        for record in media_records:
-            mediarecords_with_tags.update({record.get(id): set()})
-
         while i < len(segments):
             if isinstance(segments[i], AssessmentSegmentEntity):
                 i += 1
                 continue
 
             mediarecord_id = segments[i].media_record_id
-
 
             if isinstance(segments[i], DocumentSegmentEntity):
                 if segments[i].text != document_info['Document'].iat[i]:
@@ -96,7 +93,7 @@ class TopicModel:
 
         return mediarecords_with_tags
 
-    def add_tags_to_assessments(self, segments, assesments):
+    def add_tags_to_assessments(self, segments):
         if len(self.docs) < 11:
             _logger.info("Topic model wasn't created. More documents needed.")
             return
@@ -104,8 +101,6 @@ class TopicModel:
         assesments_with_tags = {}
 
         i = 0
-        for assessment in assesments:
-            assesments_with_tags.update({assessment.get(id): set()})
 
         while i < len(segments):
             if isinstance(segments[i], DocumentSegmentEntity) or isinstance(segments[i], VideoSegmentEntity):
@@ -142,11 +137,13 @@ if __name__ == "__main__":
 
     segment_database = SegmentDbConnector(database_connection)
     media_record_info_database = MediaRecordInfoDbConnector(database_connection)
+    assessment_database = AssessmentInfoDbConnector(database_connection)
 
     print("Loading segments and media records")
 
     segments = segment_database.get_all_entity_segments()
     media_records = media_record_info_database.get_all_media_records()
+    assessments = assessment_database.get_all_assessments()
 
     topic_model = TopicModel(segments)
 
@@ -155,9 +152,14 @@ if __name__ == "__main__":
     print("Topic model created")
 
     print("Adding tags")
-    media_records_with_tags = topic_model.add_tags_to_media_records(segments, media_records)
+    media_records_with_tags = topic_model.add_tags_to_media_records(segments)
+    assessments_with_tags = topic_model.add_tags_to_assessments(segments)
     if media_records_with_tags is not None:
         for mrid, tags in media_records_with_tags.items():
             media_record_info_database.update_media_record_tags(mrid, list(tags))
+
+    if assessments_with_tags is not None:
+        for aid, tags in assessments_with_tags.items():
+            assessment_database.update_assessment_tags(aid, list(tags))
     end = time.time()
     print("Done in " + str(end - start) + " seconds")
