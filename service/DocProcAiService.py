@@ -187,6 +187,7 @@ class DocProcAiService:
         self.__generate_tags_for_assessments(segments, topic_model)
 
     def __generate_tags_for_media_records(self, segments, topic_model):
+        _logger.info("Generating tags for media records.")
         media_records = self.media_record_info_database.get_all_media_records()
         if not media_records: # check if media_records is empty
             _logger.info("No media records found, skipping step")
@@ -199,6 +200,7 @@ class DocProcAiService:
             _logger.info("Generated tags for media records.")
 
     def __generate_tags_for_assessments(self, segments, topic_model):
+        _logger.info("Generating tags for assesments.")
         assesments = self.assesment_database.get_all_assessments()
         if not assesments: # check if assessments is empty
             _logger.info("No assessments found, skipping step")
@@ -423,6 +425,15 @@ class DocProcAiService:
         """
 
         return self.media_record_info_database.get_media_record_tags_by_media_record_id(media_record_id)
+
+    def get_assessment_tags(self, assessment_id: uuid.UUID) -> list[str]:
+        """
+        Returns the auto generated tags of the specified media record as a list.
+        :param assessment_id: The ID of the media record
+        :return: List containing the tags
+        """
+
+        return self.assesment_database.get_assessment_tags_by_id(assessment_id)
 
     def get_entities_ai_processing_state(self, entity_ids: list[uuid.UUID]) -> list[AiEntityProcessingProgressDto]:
         """

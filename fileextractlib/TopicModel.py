@@ -71,6 +71,7 @@ class TopicModel:
 
         while i < len(segments):
             if isinstance(segments[i], AssessmentSegmentEntity):
+                i += 1
                 continue
 
             mediarecord_id = segments[i].media_record_id
@@ -78,10 +79,11 @@ class TopicModel:
 
             if isinstance(segments[i], DocumentSegmentEntity):
                 if segments[i].text != document_info['Document'].iat[i]:
+                    i += 1
                     continue
-
             elif isinstance(segments[i], VideoSegmentEntity):
                 if segments[i].transcript != document_info['Document'].iat[i]:
+                    i += 1
                     continue
 
             tags = set()
@@ -107,12 +109,14 @@ class TopicModel:
 
         while i < len(segments):
             if isinstance(segments[i], DocumentSegmentEntity) or isinstance(segments[i], VideoSegmentEntity):
-                    continue
+                i += 1
+                continue
 
             assessment_id = segments[i].assessment_id
 
             if isinstance(segments[i], AssessmentSegmentEntity):
                 if segments[i].textual_representation != document_info['Document'].iat[i]:
+                    i += 1
                     continue
 
             tags = set()
@@ -142,14 +146,16 @@ if __name__ == "__main__":
 
     print("Loading segments and media records")
 
-    segments = segment_database.get_all_segments()
+    segments = segment_database.get_all_entity_segments()
     media_records = media_record_info_database.get_all_media_records()
 
-    topic_model = TopicModel(segments, media_records)
+    topic_model = TopicModel(segments)
 
     print("Running Topic model")
     topic_model.create_topic_model()
+    print("Topic model created")
 
+    print("Adding tags")
     media_records_with_tags = topic_model.add_tags_to_media_records(segments, media_records)
     if media_records_with_tags is not None:
         for mrid, tags in media_records_with_tags.items():
