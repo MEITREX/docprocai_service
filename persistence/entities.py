@@ -7,7 +7,7 @@ class MediaRecordEntity:
         self.summary = summary
         self.tags = tags
 
-class AssesmentEntity:
+class AssessmentEntity:
     def __init__(self, id: UUID, tags: set):
         self.tags = tags
 
