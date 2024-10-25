@@ -131,8 +131,7 @@ class TopicModel:
 
 
 if __name__ == "__main__":
-
-    star = time.time()
+    start = time.time()
 
     print("Connecting to DB")
     database_connection = psycopg.connect(
@@ -161,4 +160,4 @@ if __name__ == "__main__":
         for mrid, tags in media_records_with_tags.items():
             media_record_info_database.update_media_record_tags(mrid, list(tags))
     end = time.time()
-    print("Done in " + str(end - star) + " seconds")
+    print("Done in " + str(end - start) + " seconds")
