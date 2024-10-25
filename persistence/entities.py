@@ -7,6 +7,11 @@ class MediaRecordEntity:
         self.summary = summary
         self.tags = tags
 
+class AssesmentEntity:
+    def __init__(self, id: UUID, tags: set):
+        self.tags = tags
+
+
 
 class DocumentSegmentEntity:
     def __init__(self, id: UUID, media_record_id: UUID, page_index: int, text: str, thumbnail: bytes, title: str,

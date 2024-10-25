@@ -157,7 +157,7 @@ class DocProcAiService:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
             try:
-                self.__generate_tags_for_media_records()
+                self.__generate_tags()
             except ValueError as e:
                 _logger.exception(e)
 
@@ -235,6 +235,11 @@ class DocProcAiService:
                                                                 embedding)
 
                 self.assesment_database.add_assessment_info(assessment_id)
+
+            try:
+                self.__generate_tags()
+            except ValueError as e:
+                _logger.exception(e)
 
             self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
                                                                        IngestionEntityTypeDbType.ASSESSMENT,
