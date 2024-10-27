@@ -35,3 +35,9 @@ class DaprController:
             task_information: list[TaskInformationDto] = data["data"]["taskInformationList"]
 
             ai_service.enqueue_generate_assessment_segments(assessment_id, task_information)
+
+        @dapr_app.subscribe(pubsub="meitrex", topic="assessment-content-deleted")
+        def assessment_content_deleted_handler(data: dict):
+            assessment_id = uuid.UUID(data["data"]["assessmentId"])
+
+            ai_service.delete_entries_of_assessment(assessment_id)

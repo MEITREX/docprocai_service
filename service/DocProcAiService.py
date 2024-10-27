@@ -358,6 +358,18 @@ class DocProcAiService:
 
         # delete media record segment links which contain any of these segments
         self.segment_database.delete_media_record_segment_links_by_segment_ids(segment_ids)
+        self.media_record_info_database.delete_media_record_by_id(media_record_id)
+        self.ingestion_state_database.delete_ingestion_state(media_record_id)
+
+    def delete_entries_of_assessment(self, assessment_id: uuid.UUID):
+        """
+        Deletes all entries this services db keeps which are associated with the specified assessment.
+        """
+        self.segment_database.delete_assessment_segments_by_assessment_id(assessment_id)
+        self.assesment_database.delete_assessment_by_id(assessment_id)
+        self.ingestion_state_database.delete_ingestion_state(assessment_id)
+
+
 
     def get_media_record_links_for_content(self, content_id: uuid.UUID) -> list[MediaRecordSegmentLinkDto]:
         """

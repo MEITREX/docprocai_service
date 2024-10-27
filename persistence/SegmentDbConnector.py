@@ -180,6 +180,16 @@ class SegmentDbConnector:
 
         return [SegmentDbConnector.__video_segment_query_result_to_object(x) for x in query_results]
 
+    def delete_assessment_segments_by_assessment_id(self, assessment_ids: UUID) -> list[AssessmentSegmentEntity]:
+        query_results = self.db_connection.execute(
+            """
+            DELETE FROM assessment_segments
+            WHERE assessment_id = ANY(%(assessmentId)s)
+            RETURNING *
+            """,
+            {"assessmentIds": assessment_ids})
+        return [SegmentDbConnector.__assessment_segment_query_result_to_object(x) for x in query_results]
+
     def get_segment_links_by_content_id(self, content_id: UUID) -> list[MediaRecordSegmentLinkEntity]:
         result = self.db_connection.execute("""
                     SELECT

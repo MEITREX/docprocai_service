@@ -57,3 +57,11 @@ class AssessmentInfoDbConnector:
                 WHERE id = (%(id)s)
             """,
             {'tags': tags, 'id': id})
+
+    def delete_assessment_by_id(self, id: UUID):
+        self.db_connection.execute(
+            """
+            DELETE FROM assessments WHERE id = (%(id)s)
+            """,
+            {'id': id}
+        )
