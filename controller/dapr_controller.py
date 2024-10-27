@@ -6,7 +6,7 @@ from fastapi import FastAPI
 import uuid
 
 from dto import TaskInformationDto
-from events import ContentChangeEvent
+from controller.events import ContentChangeEvent
 from service.DocProcAiService import DocProcAiService
 
 
