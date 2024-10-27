@@ -45,12 +45,3 @@ class DaprController:
 
             ai_service.delete_entries_of_assessments(content_change_event)
 
-class CrudOperation(Enum):
-    CREATE = auto()
-    UPDATE = auto()
-    DELETE = auto()
-
-class ContentChangeEvent:
-    contentIds: list[uuid]
-    crudOperation: CrudOperation
-

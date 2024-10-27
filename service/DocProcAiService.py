@@ -31,7 +31,7 @@ from persistence.SegmentDbConnector import SegmentDbConnector
 from persistence.AssesmentInfoDbConnector import AssessmentInfoDbConnector
 from persistence.entities import *
 from utils.SortedPriorityQueue import SortedPriorityQueue
-from controller.dapr_controller import ContentChangeEvent, CrudOperation
+from controller.events import ContentChangeEvent, CrudOperation
 
 _logger = logging.getLogger(__name__)
 
