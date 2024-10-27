@@ -1,3 +1,5 @@
+from enum import Enum, auto
+
 import dapr
 from dapr.ext.fastapi.app import DaprApp
 from fastapi import FastAPI
@@ -36,8 +38,19 @@ class DaprController:
 
             ai_service.enqueue_generate_assessment_segments(assessment_id, task_information)
 
-        @dapr_app.subscribe(pubsub="meitrex", topic="assessment-content-deleted")
+        @dapr_app.subscribe(pubsub="meitrex", topic="content-changed")
         def assessment_content_deleted_handler(data: dict):
-            assessment_id = uuid.UUID(data["data"]["assessmentId"])
 
-            ai_service.delete_entries_of_assessment(assessment_id)
+            content_change_event = data["data"]["contentChangeEvent"]
+
+            ai_service.delete_entries_of_assessments(content_change_event)
+
+class CrudOperation(Enum):
+    CREATE = auto()
+    UPDATE = auto()
+    DELETE = auto()
+
+class ContentChangeEvent:
+    contentIds: list[uuid]
+    crudOperation: CrudOperation
+
