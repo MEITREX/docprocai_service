@@ -45,5 +45,7 @@ class DaprController:
 
             content_change_event = ContentChangeEvent(data["data"]["contentIds"], data["data"]["operation"])
 
+            print(content_change_event)
+
             ai_service.delete_entries_of_assessments(content_change_event)
 
