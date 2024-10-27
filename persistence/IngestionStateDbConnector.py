@@ -106,7 +106,7 @@ class IngestionStateDbConnector:
     def delete_ingestion_state(self, id: UUID) -> None:
         self.db_connection.execute(
             """
-            DELETE FROM ingestion_states WHERE id = ANY(%(id)s);
+            DELETE FROM media_record_ingestion_states WHERE id = ANY(%(id)s);
             """,
             {id: id}
         )
