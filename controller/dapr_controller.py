@@ -6,6 +6,7 @@ from fastapi import FastAPI
 import uuid
 
 from dto import TaskInformationDto
+from events import ContentChangeEvent
 from service.DocProcAiService import DocProcAiService
 
 
@@ -41,7 +42,7 @@ class DaprController:
         @dapr_app.subscribe(pubsub="meitrex", topic="content-changed")
         def assessment_content_deleted_handler(data: dict):
 
-            content_change_event = data["data"]["contentChangeEvent"]
+            content_change_event = ContentChangeEvent(data["data"]["contentIds"], data["data"]["crudOperation"])
 
             ai_service.delete_entries_of_assessments(content_change_event)
 
