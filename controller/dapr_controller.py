@@ -41,8 +41,9 @@ class DaprController:
 
         @dapr_app.subscribe(pubsub="meitrex", topic="content-changed")
         def assessment_content_deleted_handler(data: dict):
+            print(data)
 
-            content_change_event = ContentChangeEvent(data["data"]["contentIds"], data["data"]["crudOperation"])
+            content_change_event = ContentChangeEvent(data["data"]["contentIds"], data["data"]["operation"])
 
             ai_service.delete_entries_of_assessments(content_change_event)
 
