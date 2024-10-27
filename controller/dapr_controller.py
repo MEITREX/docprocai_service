@@ -43,6 +43,7 @@ class DaprController:
         def assessment_content_deleted_handler(data: dict):
             content_change_event = ContentChangeEvent(data["data"]["contentIds"], data["data"]["operation"])
 
-            if content_change_event.crudOperation == CrudOperation.DELETE:
+            if content_change_event.crudOperation == "DELETE":
                 ai_service.delete_entries_of_assessments(content_change_event)
+
 
