@@ -108,5 +108,5 @@ class IngestionStateDbConnector:
             """
             DELETE FROM media_record_ingestion_states WHERE id = ANY(%(id)s);
             """,
-            {id: id}
+            {'id': id}
         )
