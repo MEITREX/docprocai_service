@@ -103,10 +103,10 @@ class IngestionStateDbConnector:
             """).fetchall()
         return [(x["id"], x["entity_type"], x["state"]) for x in query_results]
 
-    def delete_ingestion_state(self, entity_id: UUID) -> None:
+    def delete_ingestion_state(self, id: UUID) -> None:
         self.db_connection.execute(
             """
             DELETE FROM ingestion_states WHERE id = ANY(%(id)s);
             """,
-            {id: entity_id}
+            {id: id}
         )
