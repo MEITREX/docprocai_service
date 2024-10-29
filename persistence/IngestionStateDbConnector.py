@@ -102,3 +102,11 @@ class IngestionStateDbConnector:
             WHERE state IN ('ENQUEUED', 'PROCESSING');
             """).fetchall()
         return [(x["id"], x["entity_type"], x["state"]) for x in query_results]
+
+    def delete_ingestion_state(self, id: UUID) -> None:
+        self.db_connection.execute(
+            """
+            DELETE FROM media_record_ingestion_states WHERE id = (%(id)s);
+            """,
+            {'id': id}
+        )

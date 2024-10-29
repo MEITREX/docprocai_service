@@ -81,3 +81,11 @@ class MediaRecordInfoDbConnector:
                 WHERE id = (%(id)s)
             """,
             {'tags': tags, 'id': id})
+
+    def delete_media_record_by_id(self, id: UUID):
+        self.db_connection.execute(
+            """
+            DELETE FROM media_records WHERE id = (%(id)s)
+            """,
+            {'id': id}
+        )
