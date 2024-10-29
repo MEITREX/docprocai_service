@@ -28,8 +28,10 @@ from fileextractlib.VideoProcessor import VideoProcessor
 from persistence.IngestionStateDbConnector import IngestionStateDbConnector
 from persistence.MediaRecordInfoDbConnector import MediaRecordInfoDbConnector
 from persistence.SegmentDbConnector import SegmentDbConnector
+from persistence.AssesmentInfoDbConnector import AssessmentInfoDbConnector
 from persistence.entities import *
 from utils.SortedPriorityQueue import SortedPriorityQueue
+from controller.events import ContentChangeEvent, CrudOperation
 
 _logger = logging.getLogger(__name__)
 
@@ -45,6 +47,7 @@ class DocProcAiService:
         self.segment_database = SegmentDbConnector(self.database_connection)
         self.media_record_info_database = MediaRecordInfoDbConnector(self.database_connection)
         self.ingestion_state_database = IngestionStateDbConnector(self.database_connection)
+        self.assesment_database = AssessmentInfoDbConnector(self.database_connection)
 
         # graphql client for interacting with the media service
         self.__media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
@@ -155,7 +158,7 @@ class DocProcAiService:
                 raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
 
             try:
-                self.__generate_tags_for_media_records()
+                self.__generate_tags()
             except ValueError as e:
                 _logger.exception(e)
 
@@ -173,20 +176,44 @@ class DocProcAiService:
                                                                             ingest_media_record_task,
                                                                             priority))
 
-    def __generate_tags_for_media_records(self):
-        record_segments = self.segment_database.get_all_media_record_segments()
-        media_records = self.media_record_info_database.get_all_media_records()
+    def __generate_tags(self):
+        segments = self.segment_database.get_all_entity_segments()
 
-        topic_model = TopicModel(record_segments, media_records)
+        topic_model = TopicModel(segments)
 
         _logger.info("Running topic model")
         topic_model.create_topic_model()
         _logger.info("Finished running topic model")
-        media_records_with_tags = topic_model.add_tags_to_media_records(record_segments, media_records)
+        self.__generate_tags_for_media_records(segments, topic_model)
+        self.__generate_tags_for_assessments(segments, topic_model)
+
+    def __generate_tags_for_media_records(self, segments, topic_model):
+        _logger.info("Generating tags for media records.")
+        media_records = self.media_record_info_database.get_all_media_records()
+        if not media_records: # check if media_records is empty
+            _logger.info("No media records found, skipping step")
+            return
+
+        media_records_with_tags = topic_model.add_tags_to_media_records(segments)
         if media_records_with_tags is not None:
             for media_record_id, tags in media_records_with_tags.items():
                 self.media_record_info_database.update_media_record_tags(media_record_id, list(tags))
             _logger.info("Generated tags for media records.")
+
+    def __generate_tags_for_assessments(self, segments, topic_model):
+        _logger.info("Generating tags for assesments.")
+        assesments = self.assesment_database.get_all_assessments()
+        if not assesments: # check if assessments is empty
+            _logger.info("No assessments found, skipping step")
+            return
+
+        assesments_with_tags = topic_model.add_tags_to_assessments(segments)
+
+        if assesments_with_tags is not None:
+            for assesment_id, tags in assesments_with_tags.items():
+                self.assesment_database.update_assessment_tags(assesment_id, list(tags))
+            _logger.info("Generated tags for assessments.")
+
 
     def enqueue_generate_assessment_segments(self,
                                              assessment_id: uuid.UUID,
@@ -209,6 +236,13 @@ class DocProcAiService:
                                                                 assessment_id,
                                                                 task_information["textualRepresentation"],
                                                                 embedding)
+
+                self.assesment_database.upsert_assessment_info(assessment_id)
+
+            try:
+                self.__generate_tags()
+            except ValueError as e:
+                _logger.exception(e)
 
             self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
                                                                        IngestionEntityTypeDbType.ASSESSMENT,
@@ -325,6 +359,23 @@ class DocProcAiService:
 
         # delete media record segment links which contain any of these segments
         self.segment_database.delete_media_record_segment_links_by_segment_ids(segment_ids)
+        self.ingestion_state_database.delete_ingestion_state(media_record_id)
+        self.media_record_info_database.delete_media_record_by_id(media_record_id)
+
+
+    def delete_entries_of_assessments(self, content_change_event: ContentChangeEvent):
+        """
+        Deletes all entries this services db keeps which are associated with the specified assessment.
+        """
+        content_change_event = content_change_event
+
+        for assessment_id in content_change_event.contentIds:
+            self.segment_database.delete_assessment_segments_by_assessment_id(assessment_id)
+            self.ingestion_state_database.delete_ingestion_state(assessment_id)
+            self.assesment_database.delete_assessment_by_id(assessment_id)
+
+
+
 
     def get_media_record_links_for_content(self, content_id: uuid.UUID) -> list[MediaRecordSegmentLinkDto]:
         """
@@ -392,6 +443,15 @@ class DocProcAiService:
         """
 
         return self.media_record_info_database.get_media_record_tags_by_media_record_id(media_record_id)
+
+    def get_assessment_tags(self, assessment_id: uuid.UUID) -> list[str]:
+        """
+        Returns the auto generated tags of the specified media record as a list.
+        :param assessment_id: The ID of the media record
+        :return: List containing the tags
+        """
+
+        return self.assesment_database.get_assessment_tags_by_id(assessment_id)
 
     def get_entities_ai_processing_state(self, entity_ids: list[uuid.UUID]) -> list[AiEntityProcessingProgressDto]:
         """

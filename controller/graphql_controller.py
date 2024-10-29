@@ -85,6 +85,10 @@ class GraphQLController:
         def get_media_record_suggested_tags(parent, info, mediaRecordId: UUID) -> list[str]:
             return ai_service.get_media_record_tags(mediaRecordId)
 
+        @query.field("_internal_noauth_getMediaRecordSuggestedTags")
+        def get_media_record_suggested_tags(parent, info, assessmentId: UUID) -> list[str]:
+            return ai_service.get_assessment_tags(assessmentId)
+
         @query.field("_internal_noauth_getMediaRecordsAiProcessingProgress")
         def get_media_records_ai_processing_state(parent, info, mediaRecordIds: list[UUID])\
                 -> list[AiEntityProcessingProgressDto]:
