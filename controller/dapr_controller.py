@@ -1,9 +1,12 @@
+from enum import Enum, auto
+
 import dapr
 from dapr.ext.fastapi.app import DaprApp
 from fastapi import FastAPI
 import uuid
 
 from dto import TaskInformationDto
+from controller.events import ContentChangeEvent, CrudOperation
 from service.DocProcAiService import DocProcAiService
 
 
@@ -35,3 +38,12 @@ class DaprController:
             task_information: list[TaskInformationDto] = data["data"]["taskInformationList"]
 
             ai_service.enqueue_generate_assessment_segments(assessment_id, task_information)
+
+        @dapr_app.subscribe(pubsub="meitrex", topic="content-changed")
+        def assessment_content_deleted_handler(data: dict):
+            content_change_event = ContentChangeEvent(data["data"]["contentIds"], data["data"]["operation"])
+
+            if content_change_event.crudOperation == "DELETE":
+                ai_service.delete_entries_of_assessments(content_change_event)
+
+
