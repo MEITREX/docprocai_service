@@ -26,8 +26,13 @@ class TopicModel:
         self.docs = []
 
     def create_topic_model(self):
+        """
+        This method creates the topic model from which the suggested tags are generated.
+
+        """
         embeddings = []
 
+        # find the appropriate fields to use depending on the segmentEntity
         for entity in self.record_segments:
             if isinstance(entity, DocumentSegmentEntity):
                 self.docs.append(entity.text)
@@ -39,19 +44,25 @@ class TopicModel:
                 self.docs.append(entity.textual_representation)
                 embeddings.append(entity.embedding)
 
+        # check to ensure enough segments are available to run the topic model
         if len(self.docs) < 11:
             _logger.info("More documents needed to create topic model.")
             return
 
         embeddings = np.array(embeddings)
+        # set stop_words to remove stop words, ngram_range defines how many words the terms can contain
         vectorizer_model = CountVectorizer(stop_words="english", ngram_range=(1, 3))
+        # reduce_frequent_words to further reduce common words,
+        # bm25_weighting changes the weighting to a more robust one for small datasets
+        # more info: https://maartengr.github.io/BERTopic/getting_started/ctfidf/ctfidf.html
         ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True, bm25_weighting=True)
+        # change diversity to further improve results of the keywords, lower values means less diverse
         mmr = MaximalMarginalRelevance(diversity=0.3)
 
         representation_models = mmr
 
         self.model = BERTopic(
-            min_topic_size=7,
+            min_topic_size=7, # set the min topic size lower to work better with small datasets
             vectorizer_model=vectorizer_model,
             ctfidf_model=ctfidf_model,
             representation_model=representation_models
@@ -60,6 +71,10 @@ class TopicModel:
         self.model.fit_transform(self.docs, embeddings)
 
     def add_tags_to_media_records(self, segments):
+        """
+        This method adds tags to all media records. Replaces old tags when run.
+
+        """
         if len(self.docs) < 11:
             _logger.info("Topic model wasn't created. More documents needed.")
             return
@@ -94,6 +109,10 @@ class TopicModel:
         return mediarecords_with_tags
 
     def add_tags_to_assessments(self, segments):
+        """
+       This method adds tags to all assessments. Replaces old tags when run.
+
+       """
         if len(self.docs) < 11:
             _logger.info("Topic model wasn't created. More documents needed.")
             return

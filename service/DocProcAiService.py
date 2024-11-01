@@ -100,8 +100,11 @@ class DocProcAiService:
             self.segment_database.delete_video_segments_by_media_record_id([media_record_id])
 
             if record_type == "PRESENTATION" or record_type == "DOCUMENT":
+                _logger.info("Processing file of Type: " + record_type)
+                _logger.info("Starting document processor for " + str(media_record_id))
                 document_processor = DocumentProcessor()
                 document_data = document_processor.process(download_url)
+                _logger.info("Generating embeddings for " + str(media_record_id))
                 self.__lecture_pdf_embedding_generator.generate_embeddings(document_data.pages)
                 for segment in document_data.pages:
                     thumbnail_bytes = io.BytesIO()
@@ -116,10 +119,13 @@ class DocProcAiService:
 
                 if config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]:
                     # generate and store a summary of this media record
+                    _logger.info("Generating summary for " + str(media_record_id))
                     self.__lecture_llm_generator.generate_summary_for_document(document_data)
 
                 self.media_record_info_database.upsert_media_record_info(media_record_id, document_data.summary, None)
             elif record_type == "VIDEO":
+                _logger.info("Processing file of Type: " + record_type)
+                _logger.info("Starting video processor for " + str(media_record_id))
                 video_processor = VideoProcessor(
                     segment_image_similarity_threshold=
                     config.current["video_segmentation"]["segment_image_similarity_threshold"],
@@ -128,13 +134,16 @@ class DocProcAiService:
                 del video_processor
 
                 # generate text embeddings for the segments of the video
+                _logger.info("Generating embeddings for " + str(media_record_id))
                 self.__lecture_video_embedding_generator.generate_embeddings(video_data.segments)
 
                 # generate titles for the video's segments if llm features enabled
                 if config.current["lecture_llm_generator"]["segment_title_generator"]["enabled"]:
+                    _logger.info("Generating title for " + str(media_record_id))
                     self.__lecture_llm_generator.generate_titles_for_video(video_data)
                 else:
                     # otherwise set empty data/placeholders
+                    _logger.info("LLM generator disabled. Setting placeholders.")
                     video_data.summary = []
                     for i, segment in enumerate(video_data.segments, start=1):
                         segment.title = "Section " + str(i)
@@ -177,6 +186,9 @@ class DocProcAiService:
                                                                             priority))
 
     def __generate_tags(self):
+        """
+        Generates the suggested tags for all media records and assessments. This will recreate all suggested tags
+        """
         segments = self.segment_database.get_all_entity_segments()
 
         topic_model = TopicModel(segments)
@@ -188,6 +200,10 @@ class DocProcAiService:
         self.__generate_tags_for_assessments(segments, topic_model)
 
     def __generate_tags_for_media_records(self, segments, topic_model):
+        """
+        Generates the suggested tags for all media records. This will recreate all suggested tags.
+        This step will be skipped if no media records are found.
+        """
         _logger.info("Generating tags for media records.")
         media_records = self.media_record_info_database.get_all_media_records()
         if not media_records: # check if media_records is empty
@@ -201,6 +217,10 @@ class DocProcAiService:
             _logger.info("Generated tags for media records.")
 
     def __generate_tags_for_assessments(self, segments, topic_model):
+        """
+        Generates the suggested tags for all assessments. This will recreate all suggested tags.
+        This step will be skipped if no assessments are found.
+        """
         _logger.info("Generating tags for assesments.")
         assesments = self.assesment_database.get_all_assessments()
         if not assesments: # check if assessments is empty
