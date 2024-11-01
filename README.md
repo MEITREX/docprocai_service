@@ -2,6 +2,15 @@
 
 This service is designed to process and manage uploaded lecture material (video recordings, documents, slides) to facilitate some advanced features in the MEITREX platform.
 
+## Requirements
+To run the service locally without docker or for development the following are required:
+* [Python 3.12.x](https://www.python.org) 
+* [ffmpeg](https://www.ffmpeg.org/about.html) 
+* [LibreOffice](https://www.libreoffice.org) 
+* [pytorch](https://pytorch.org/get-started/locally/)
+
+See [Installation](#installation) for more information
+
 ## Features
 * Splitting of lecture videos into sections based on detected slide changes via computer vision
 * OCR of lecture video on screen text
@@ -9,9 +18,10 @@ This service is designed to process and manage uploaded lecture material (video 
 * Generating of text embeddings on a per-section-basis for videos and per-page-basis for documents
 * Semantic search/fetching of semantically similar sections of lecture material
 * Automatic generation of section titles for the video sections generated
+* Automatic tag suggestion for media content and assessments
 
 ## Installation
-This service requires pytorch to function. As pytorch GPU-support is required for some features of this service, the pip-distributed version of pytorch cannot be used and instead a
+This service requires [pytorch](https://pytorch.org/get-started/locally/) to function. As pytorch GPU-support is required for some features of this service, the pip-distributed version of pytorch cannot be used and instead a
 platform-specific version has to be used.
 By default, pytorch for NVIDIA CUDA 12.4 is used, as this should provide the most capability for widespread GPUs. If you need to use a different version of pytorch, you can change
 the install script located in the `Dockerfile`.
