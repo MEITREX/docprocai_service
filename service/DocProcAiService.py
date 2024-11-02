@@ -542,13 +542,22 @@ class DocProcAiService:
         :param content_whitelist: Whitelist of IDs of contents whose segments should be included from the search results
         :return: List of search results
         """
+        start_time = time.time()
         query_embedding = self.__sentence_embedding_runner.generate_embeddings([query_text])[0]
+        stop_time = time.time()
+        _logger.info("Generating Embeddings: " + str(stop_time - start_time) + "seconds")
 
+        start_time = time.time()
         parent_whitelist = await self.__generate_segment_parent_whitelist(content_whitelist)
+        stop_time = time.time()
+        _logger.info("Generating Segment parent whitelist: " + str(stop_time - start_time) + "seconds")
 
+        start_time = time.time()
         query_result = self.segment_database.get_top_segments_by_embedding_distance(query_embedding,
                                                                                     count,
                                                                                     parent_whitelist)
+        stop_time = time.time()
+        _logger.info("Get top segments from DB: " + str(stop_time - start_time) + "seconds")
 
         return [mapper.semantic_search_result_entity_to_dto(result) for result in query_result]
 
