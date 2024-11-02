@@ -26,14 +26,15 @@ See [Installation](#installation) for more information
 This service requires [pytorch](https://pytorch.org/get-started/locally/) to function. As pytorch GPU-support is required for some features of this service, the pip-distributed version of pytorch cannot be used and instead a
 platform-specific version has to be used.
 By default, pytorch for NVIDIA CUDA 12.4 is used, as this should provide the most capability for widespread GPUs. If you need to use a different version of pytorch, you can change
-the installation script located in the `Dockerfile`.
+the installation script located in the [Dockerfile](Dockerfile)
+.
 
 > [!CAUTION]
 > Note that GPU features require a supported GPU and OS to function, especially in conjunction with Docker, as the service runs in a Docker container.
 > 
 > Docker does not provide GPU-support for macOS at this point in time, thus GPU-features of the service do not function on macOS.
 >
->  GPU features can be disabled using the `config.yaml`.
+>  GPU features can be disabled using the [config.yaml](config.yaml).
 
 
 ### Development
@@ -45,5 +46,5 @@ To install the dependencies run 'pip install -r /path/to/requirements.txt'.
 Pytorch needs to be installed manually as the platform specific version has to be used.
 
 ## Configuration
-The service uses the `config.yaml` file located in the root directory for configuration.
+The service uses the [config.yaml](config.yaml) file located in the root directory for configuration.
 For further information about configuration check out this file, all configuration properties are explained using in-file comments.
