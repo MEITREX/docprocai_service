@@ -1,5 +1,6 @@
 import gc
 import json
+from collections import OrderedDict
 from typing import Annotated, Optional
 
 import pydantic
@@ -40,58 +41,46 @@ class LectureLlmGenerator:
         :param video_data: The video data of the video to generate segment titles for.
         """
 
-        class PromptJsonOutputElement(pydantic.BaseModel):
-            start_time: int
-            title: str
+        if config.current["lecture_llm_generator"]["keep_models_loaded"]:
+            llama_runner = self.__title_llama_runner
+        else:
+            llama_runner = LectureLlmGenerator.__load_title_llama_runner()
 
         current_segment_index = 0
-
         while current_segment_index < len(video_data.segments):
             step_segment_count = min(len(video_data.segments) - current_segment_index, 10)
+            step_video_segments = video_data.segments[current_segment_index:current_segment_index + step_segment_count]
 
             prompt_input = [{
                 "start_time": x.start_time,
                 "transcript": x.transcript,
                 "screen_text": x.screen_text
-            } for x in video_data.segments[current_segment_index:current_segment_index + step_segment_count]]
+            } for x in step_video_segments]
 
-            answer_schema = (pydantic.RootModel[
-                Annotated[list[PromptJsonOutputElement], Len(min_length=step_segment_count, max_length=step_segment_count)]]
-                             .model_json_schema())
+            # construct the answer schema
+            model_properties = OrderedDict()
 
-            prompt = """
-                    <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+            for segment in step_video_segments:
+                model_properties[str(segment.start_time)] = (str, ...)
 
-                    You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+            answer_model = pydantic.create_model("SegmentTitle", **model_properties)
 
-                    I have an input JSON file I need to process. It contains an array, where each element is a snippet of a lecture video. Each element contains the keys "start_time", which denotes the start time of the snippet in seconds after video start, a "transcript" of the spoken text, and "screen_text", the text on screen as detected by OCR. The transcript and screen_text might contain inaccuracies due to the nature of STT and OCR. The video was split into snippets by detecting when the screen changes by a significant amount. Please create a JSON file containing an array of elements, where each element represents the respective snippet from the input JSON. Each element should contain a title you'd give this snippet. Choose high-quality and concise titles. If you want two back-to-back snippet to be considered as the same chapter, give them the same title in your JSON array. Remember to answer only with a JSON file. This is the input JSON:
+            answer_schema = answer_model.model_json_schema()
 
-                    Your response should be following this JSON schema: {json_schema}
-                    ```
-                    {json_input}
-                    ```<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-                    """.format(json_input=json.dumps(prompt_input, indent=4, ensure_ascii=False),
-                               json_schema=answer_schema)
+            _logger.info(str(answer_schema))
 
-            if config.current["lecture_llm_generator"]["keep_models_loaded"]:
-                llama_runner = self.__title_llama_runner
-            else:
-                llama_runner = LectureLlmGenerator.__load_title_llama_runner()
+            prompt = (config.current["lecture_llm_generator"]["segment_title_generator"]["prompt"]
+                      .format(json_input=json.dumps(prompt_input, indent=4, ensure_ascii=False),
+                               json_schema=answer_schema))
 
             # get the answer json, force the LLM to conform to our json schema
             answer_json = LectureLlmGenerator.__generate_answer_json(
                 llama_runner,
                 prompt,
                 answer_schema,
-                pipeline_args=config.current["lecture_llm_generator"]["document_title_generator"]["hyperparameters"])
-            for i, segment_json in enumerate(answer_json):
-                video_data.segments[current_segment_index + i].title = segment_json["title"]
-
-            # if we don't want to keep the model loaded, get rid of it ASAP
-            if not config.current["lecture_llm_generator"]["keep_models_loaded"]:
-                del llama_runner
-                gc.collect()
-                torch.cuda.empty_cache()
+                pipeline_args=config.current["lecture_llm_generator"]["segment_title_generator"]["hyperparameters"])
+            for (key, value) in answer_json.items():
+                next(x for x in video_data.segments if x.start_time == int(key)).title = value
 
             # if we haven't yet reached the end of the video, step through the segments' titles we've generated and
             # search for the last "switch" from one title to another. We will continue generating more titles for
@@ -117,9 +106,18 @@ class LectureLlmGenerator:
             else:
                 return
 
+        # if we don't want to keep the model loaded, get rid of it ASAP
+        if not config.current["lecture_llm_generator"]["keep_models_loaded"]:
+            del llama_runner
+            gc.collect()
+            torch.cuda.empty_cache()
+
 
 
     def generate_summary_for_video(self, video_data: VideoData) -> None:
+
+        # TODO: Disabled for now
+        return
 
         json_input = [{
             "start_time": x.start_time,
