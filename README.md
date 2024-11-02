@@ -9,6 +9,8 @@ To run the service for development the following are required:
 * [LibreOffice](https://www.libreoffice.org) 
 * [pytorch](https://pytorch.org/get-started/locally/)
 
+If run via Docker the requirements are installed automatically.
+
 See [Installation](#installation) for more information
 
 ## Features
