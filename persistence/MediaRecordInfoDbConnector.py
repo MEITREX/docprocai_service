@@ -26,14 +26,15 @@ class MediaRecordInfoDbConnector:
     def upsert_media_record_info(self, id: UUID, summary: list[str], vtt: Optional[str]):
         self.db_connection.execute(
             query="""
-                  INSERT INTO media_records (id, summary, vtt)
-                  VALUES (%s, %s, %s)
+                  INSERT INTO media_records (id, summary, vtt, tags)
+                  VALUES (%s, %s, %s, %s)
                   ON CONFLICT (id)
                   DO UPDATE SET
                       summary = EXCLUDED.summary,
-                      vtt = EXCLUDED.vtt;
+                      vtt = EXCLUDED.vtt,
+                      tags = EXCLUDED.tags;
                   """,
-            params=(id, summary, vtt)
+            params=(id, summary, vtt, [])
         )
 
     def get_media_record_summary_by_media_record_id(self, media_record_id) -> list[str]:
