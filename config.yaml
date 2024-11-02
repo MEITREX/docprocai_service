@@ -83,7 +83,7 @@ lecture_llm_generator:
     # for inference
     base_model_path: "./llm_data/models/Meta-Llama-3.1-8B-Instruct"
     # path to the folder containing the llm lora adapter which should be used for inference
-    lora_model_path: "./llm_data/loras/llama-3-1-8B-instruct-titles"
+    lora_model_path: null
     # Hyperparameters passed to the model at inference-time
     hyperparameters:
       max_new_tokens: 300
