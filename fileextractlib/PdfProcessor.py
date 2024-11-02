@@ -1,3 +1,4 @@
+import logging
 import io
 import pdf2image
 import argparse
@@ -7,6 +8,7 @@ import tika.parser
 from pypdf import PdfWriter, PdfReader
 from fileextractlib.DocumentData import DocumentData, PageData
 
+_logger = logging.getLogger(__name__)
 
 class PdfProcessor:
     """
@@ -18,9 +20,11 @@ class PdfProcessor:
 
     def process_from_io(self, file: typing.BinaryIO) -> DocumentData:
         # create thumbnail images for each page
+        _logger.info("Creating thumbnails")
         page_images = pdf2image.convert_from_bytes(file.read())
 
         # split the pdf into pages, so we can extract text for each page separately
+        _logger.info("Splitting document into pages")
         file.seek(0)
         pdf_reader = PdfReader(file)
 
@@ -39,6 +43,8 @@ class PdfProcessor:
                     continue
 
                 pages.append(PageData(page_index, page_text, page_images[page_index], None))
+
+        _logger.info("Finished processing file.")
 
         return DocumentData(pages, [])
 
