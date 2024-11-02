@@ -99,8 +99,8 @@ class DocProcAiService:
             self.segment_database.delete_document_segments_by_media_record_id([media_record_id])
             self.segment_database.delete_video_segments_by_media_record_id([media_record_id])
 
+            _logger.info("Processing file of Type: " + record_type)
             if record_type == "PRESENTATION" or record_type == "DOCUMENT":
-                _logger.info("Processing file of Type: " + record_type)
                 _logger.info("Starting document processor for " + str(media_record_id))
                 document_processor = DocumentProcessor()
                 document_data = document_processor.process(download_url)
@@ -124,7 +124,6 @@ class DocProcAiService:
 
                 self.media_record_info_database.upsert_media_record_info(media_record_id, document_data.summary, None)
             elif record_type == "VIDEO":
-                _logger.info("Processing file of Type: " + record_type)
                 _logger.info("Starting video processor for " + str(media_record_id))
                 video_processor = VideoProcessor(
                     segment_image_similarity_threshold=
