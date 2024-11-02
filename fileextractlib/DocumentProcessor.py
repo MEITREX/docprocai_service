@@ -1,4 +1,5 @@
 import io
+import logging
 
 import requests
 from fileextractlib.DocumentData import DocumentData
@@ -6,6 +7,7 @@ from fileextractlib.PdfProcessor import PdfProcessor
 from fileextractlib.PowerPointProcessor import PowerPointProcessor
 
 
+_logger = logging.getLogger(__name__)
 class DocumentProcessor:
     def __init__(self):
         self.pdf_processor = PdfProcessor()
@@ -21,6 +23,8 @@ class DocumentProcessor:
             raise ValueError("Content type header not found")
 
         if content_type_header == "application/pdf":
+            _logger.info("Processing PDF")
             return self.pdf_processor.process_from_io(file_bytes)
         elif content_type_header == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+            _logger.info("Processing Powerpoint")
             return self.powerpoint_processor.process_from_io(file_bytes)

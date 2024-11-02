@@ -86,87 +86,98 @@ class DocProcAiService:
         """
 
         async def ingest_media_record_task():
-            media_record = await self.__media_service_client.get_media_record_type_and_download_url(media_record_id)
-            download_url = media_record["internalDownloadUrl"]
-
-            record_type: str = media_record["type"]
-
-            _logger.info("Ingesting media record with download URL: " + download_url)
-            self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
-                                                                       IngestionEntityTypeDbType.MEDIA_RECORD,
-                                                                       IngestionStateDbType.PROCESSING)
-
-            self.segment_database.delete_document_segments_by_media_record_id([media_record_id])
-            self.segment_database.delete_video_segments_by_media_record_id([media_record_id])
-
-            if record_type == "PRESENTATION" or record_type == "DOCUMENT":
-                document_processor = DocumentProcessor()
-                document_data = document_processor.process(download_url)
-                self.__lecture_pdf_embedding_generator.generate_embeddings(document_data.pages)
-                for segment in document_data.pages:
-                    thumbnail_bytes = io.BytesIO()
-                    segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
-                    # TODO: Fill placeholder title
-                    self.segment_database.insert_document_segment(segment.text,
-                                                                  media_record_id,
-                                                                  segment.page_number,
-                                                                  thumbnail_bytes.getvalue(),
-                                                                  None,
-                                                                  segment.embedding)
-
-                if config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]:
-                    # generate and store a summary of this media record
-                    self.__lecture_llm_generator.generate_summary_for_document(document_data)
-
-                self.media_record_info_database.upsert_media_record_info(media_record_id, document_data.summary, None)
-            elif record_type == "VIDEO":
-                video_processor = VideoProcessor(
-                    segment_image_similarity_threshold=
-                    config.current["video_segmentation"]["segment_image_similarity_threshold"],
-                    minimum_segment_length=config.current["video_segmentation"]["minimum_segment_length"])
-                video_data = video_processor.process(download_url)
-                del video_processor
-
-                # generate text embeddings for the segments of the video
-                self.__lecture_video_embedding_generator.generate_embeddings(video_data.segments)
-
-                # generate titles for the video's segments if llm features enabled
-                if config.current["lecture_llm_generator"]["segment_title_generator"]["enabled"]:
-                    self.__lecture_llm_generator.generate_titles_for_video(video_data)
-                else:
-                    # otherwise set empty data/placeholders
-                    video_data.summary = []
-                    for i, segment in enumerate(video_data.segments, start=1):
-                        segment.title = "Section " + str(i)
-
-                for segment in video_data.segments:
-                    thumbnail_bytes = io.BytesIO()
-                    segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
-                    self.segment_database.insert_video_segment(segment.screen_text, segment.transcript, media_record_id,
-                                                               segment.start_time, thumbnail_bytes.getvalue(),
-                                                               segment.title, segment.embedding)
-
-                if config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]:
-                    # generate and store a summary of this media record
-                    self.__lecture_llm_generator.generate_summary_for_video(video_data)
-
-                # store media record-level data: summary & closed captions vtt string
-                self.media_record_info_database.upsert_media_record_info(media_record_id,
-                                                                         video_data.summary,
-                                                                         video_data.vtt.content)
-            else:
-                raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
-
             try:
-                self.__generate_tags()
-            except ValueError as e:
-                _logger.exception(e)
+                media_record = await self.__media_service_client.get_media_record_type_and_download_url(media_record_id)
+                download_url = media_record["internalDownloadUrl"]
 
-            self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
-                                                                       IngestionEntityTypeDbType.MEDIA_RECORD,
-                                                                       IngestionStateDbType.DONE)
+                record_type: str = media_record["type"]
 
-            _logger.info("Finished ingesting media record with download URL: " + download_url)
+                _logger.info("Ingesting media record with download URL: " + download_url)
+                self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
+                                                                           IngestionEntityTypeDbType.MEDIA_RECORD,
+                                                                           IngestionStateDbType.PROCESSING)
+
+                self.segment_database.delete_document_segments_by_media_record_id([media_record_id])
+                self.segment_database.delete_video_segments_by_media_record_id([media_record_id])
+
+                _logger.info("Processing file of Type: " + record_type)
+                if record_type == "PRESENTATION" or record_type == "DOCUMENT":
+                    _logger.info("Starting document processor for " + str(media_record_id))
+                    document_processor = DocumentProcessor()
+                    document_data = document_processor.process(download_url)
+                    _logger.info("Generating embeddings for " + str(media_record_id))
+                    self.__lecture_pdf_embedding_generator.generate_embeddings(document_data.pages)
+                    for segment in document_data.pages:
+                        thumbnail_bytes = io.BytesIO()
+                        segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
+                        # TODO: Fill placeholder title
+                        self.segment_database.insert_document_segment(segment.text,
+                                                                      media_record_id,
+                                                                      segment.page_number,
+                                                                      thumbnail_bytes.getvalue(),
+                                                                      None,
+                                                                      segment.embedding)
+
+                    if config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]:
+                        # generate and store a summary of this media record
+                        _logger.info("Generating summary for " + str(media_record_id))
+                        self.__lecture_llm_generator.generate_summary_for_document(document_data)
+
+                    self.media_record_info_database.upsert_media_record_info(media_record_id, document_data.summary, None)
+                elif record_type == "VIDEO":
+                    _logger.info("Starting video processor for " + str(media_record_id))
+                    video_processor = VideoProcessor(
+                        segment_image_similarity_threshold=
+                        config.current["video_segmentation"]["segment_image_similarity_threshold"],
+                        minimum_segment_length=config.current["video_segmentation"]["minimum_segment_length"])
+                    video_data = video_processor.process(download_url)
+                    del video_processor
+
+                    # generate text embeddings for the segments of the video
+                    _logger.info("Generating embeddings for " + str(media_record_id))
+                    self.__lecture_video_embedding_generator.generate_embeddings(video_data.segments)
+
+                    # generate titles for the video's segments if llm features enabled
+                    if config.current["lecture_llm_generator"]["segment_title_generator"]["enabled"]:
+                        _logger.info("Generating title for " + str(media_record_id))
+                        self.__lecture_llm_generator.generate_titles_for_video(video_data)
+                    else:
+                        # otherwise set empty data/placeholders
+                        _logger.info("LLM generator disabled. Setting placeholders.")
+                        video_data.summary = []
+                        for i, segment in enumerate(video_data.segments, start=1):
+                            segment.title = "Section " + str(i)
+
+                    for segment in video_data.segments:
+                        thumbnail_bytes = io.BytesIO()
+                        segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
+                        self.segment_database.insert_video_segment(segment.screen_text, segment.transcript, media_record_id,
+                                                                   segment.start_time, thumbnail_bytes.getvalue(),
+                                                                   segment.title, segment.embedding)
+
+                    if config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]:
+                        # generate and store a summary of this media record
+                        self.__lecture_llm_generator.generate_summary_for_video(video_data)
+
+                    # store media record-level data: summary & closed captions vtt string
+                    self.media_record_info_database.upsert_media_record_info(media_record_id,
+                                                                             video_data.summary,
+                                                                             video_data.vtt.content)
+                else:
+                    raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
+
+                try:
+                    self.__generate_tags()
+                except ValueError as e:
+                    _logger.exception(e)
+
+                self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
+                                                                           IngestionEntityTypeDbType.MEDIA_RECORD,
+                                                                           IngestionStateDbType.DONE)
+
+                _logger.info("Finished ingesting media record with download URL: " + download_url)
+            except Exception as e:
+                _logger.exception("Error while processing ingest_media_record queue task", e)
 
         priority = 0
         self.ingestion_state_database.upsert_entity_ingestion_info(media_record_id,
@@ -177,6 +188,9 @@ class DocProcAiService:
                                                                             priority))
 
     def __generate_tags(self):
+        """
+        Generates the suggested tags for all media records and assessments. This will recreate all suggested tags
+        """
         segments = self.segment_database.get_all_entity_segments()
 
         topic_model = TopicModel(segments)
@@ -188,6 +202,10 @@ class DocProcAiService:
         self.__generate_tags_for_assessments(segments, topic_model)
 
     def __generate_tags_for_media_records(self, segments, topic_model):
+        """
+        Generates the suggested tags for all media records. This will recreate all suggested tags.
+        This step will be skipped if no media records are found.
+        """
         _logger.info("Generating tags for media records.")
         media_records = self.media_record_info_database.get_all_media_records()
         if not media_records: # check if media_records is empty
@@ -201,6 +219,10 @@ class DocProcAiService:
             _logger.info("Generated tags for media records.")
 
     def __generate_tags_for_assessments(self, segments, topic_model):
+        """
+        Generates the suggested tags for all assessments. This will recreate all suggested tags.
+        This step will be skipped if no assessments are found.
+        """
         _logger.info("Generating tags for assesments.")
         assesments = self.assesment_database.get_all_assessments()
         if not assesments: # check if assessments is empty
@@ -219,36 +241,38 @@ class DocProcAiService:
                                              assessment_id: uuid.UUID,
                                              task_information_list: list[TaskInformationDto]) -> None:
         async def generate_assessment_segments_task() -> None:
-            _logger.info("Ingesting assessment with id " + str(assessment_id))
-            self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
-                                                                       IngestionEntityTypeDbType.ASSESSMENT,
-                                                                       IngestionStateDbType.PROCESSING)
-
-            self.segment_database.delete_assessment_segments_by_assessment_id(assessment_id)
-
-            sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
-
-            for task_information in task_information_list:
-                embedding: Tensor = sentence_embedding_runner.generate_embeddings(
-                    [task_information["textualRepresentation"]])[0]
-
-                self.segment_database.upsert_assessment_segment(task_information["taskId"],
-                                                                assessment_id,
-                                                                task_information["textualRepresentation"],
-                                                                embedding)
-
-                self.assesment_database.upsert_assessment_info(assessment_id)
-
             try:
-                self.__generate_tags()
-            except ValueError as e:
-                _logger.exception(e)
+                _logger.info("Ingesting assessment with id " + str(assessment_id))
+                self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
+                                                                           IngestionEntityTypeDbType.ASSESSMENT,
+                                                                           IngestionStateDbType.PROCESSING)
 
-            self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
-                                                                       IngestionEntityTypeDbType.ASSESSMENT,
-                                                                       IngestionStateDbType.DONE)
-            _logger.info("Finished ingesting assessment with id " + str(assessment_id))
+                self.segment_database.delete_assessment_segments_by_assessment_id(assessment_id)
 
+                sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
+
+                for task_information in task_information_list:
+                    embedding: Tensor = sentence_embedding_runner.generate_embeddings(
+                        [task_information["textualRepresentation"]])[0]
+
+                    self.segment_database.upsert_assessment_segment(task_information["taskId"],
+                                                                    assessment_id,
+                                                                    task_information["textualRepresentation"],
+                                                                    embedding)
+
+                    self.assesment_database.upsert_assessment_info(assessment_id)
+
+                try:
+                    self.__generate_tags()
+                except ValueError as e:
+                    _logger.exception(e)
+
+                self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
+                                                                           IngestionEntityTypeDbType.ASSESSMENT,
+                                                                           IngestionStateDbType.DONE)
+                _logger.info("Finished ingesting assessment with id " + str(assessment_id))
+            except Exception as e:
+                _logger.exception("Error while processing generate_assessment_segments queue task", e)
         priority = 2
         self.ingestion_state_database.upsert_entity_ingestion_info(assessment_id,
                                                                    IngestionEntityTypeDbType.ASSESSMENT,
@@ -267,56 +291,59 @@ class DocProcAiService:
             """
             Function which performs the media record linking. Executed as a task asynchronously.
             """
-            _logger.info("Generating content media record links for content " + str(content_id) + "...")
-            self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                                       IngestionEntityTypeDbType.MEDIA_CONTENT,
-                                                                       IngestionStateDbType.PROCESSING)
+            try:
+                _logger.info("Generating content media record links for content " + str(content_id) + "...")
+                self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
+                                                                           IngestionEntityTypeDbType.MEDIA_CONTENT,
+                                                                           IngestionStateDbType.PROCESSING)
 
-            start_time = time.time()
+                start_time = time.time()
 
-            self.segment_database.delete_media_record_segment_links_by_content_ids([content_id])
+                self.segment_database.delete_media_record_segment_links_by_content_ids([content_id])
 
-            # get the ids of the media records which are part of this content
-            media_record_ids = await self.__media_service_client.get_media_record_ids_of_contents([content_id])
+                # get the ids of the media records which are part of this content
+                media_record_ids = await self.__media_service_client.get_media_record_ids_of_contents([content_id])
 
-            # we could first run a query to check if any records even match, but considering that linking usually only
-            # happens after ingestion, we can assume that the records exist, so that would be an unnecessary query
-            # From the returned list, create a dict sorted by which segment is associated with which media record
-            media_records_segments: dict[uuid.UUID, list[DocumentSegmentEntity | VideoSegmentEntity]] = {}
-            for result in self.segment_database.get_media_record_segments_by_media_record_ids(media_record_ids):
-                if result.media_record_id not in media_records_segments:
-                    media_records_segments[result.media_record_id] = []
-                media_records_segments[result.media_record_id].append(result)
+                # we could first run a query to check if any records even match, but considering that linking usually only
+                # happens after ingestion, we can assume that the records exist, so that would be an unnecessary query
+                # From the returned list, create a dict sorted by which segment is associated with which media record
+                media_records_segments: dict[uuid.UUID, list[DocumentSegmentEntity | VideoSegmentEntity]] = {}
+                for result in self.segment_database.get_media_record_segments_by_media_record_ids(media_record_ids):
+                    if result.media_record_id not in media_records_segments:
+                        media_records_segments[result.media_record_id] = []
+                    media_records_segments[result.media_record_id].append(result)
 
-            # now we can check for links
-            # go through each media record's segments
-            linking_results: dict[UUID, UUID] = {}
-            threads: list[threading.Thread] = []
-            for media_record_id, segments in reversed(media_records_segments.items()):
-                for segment in segments:
-                    threads.append(
-                        threading.Thread(target=DocProcAiService.__match_segment_against_other_media_records,
-                                         args=(linking_results, media_record_id, segment, media_records_segments)))
+                # now we can check for links
+                # go through each media record's segments
+                linking_results: dict[UUID, UUID] = {}
+                threads: list[threading.Thread] = []
+                for media_record_id, segments in reversed(media_records_segments.items()):
+                    for segment in segments:
+                        threads.append(
+                            threading.Thread(target=DocProcAiService.__match_segment_against_other_media_records,
+                                             args=(linking_results, media_record_id, segment, media_records_segments)))
 
-            for thread in threads:
-                thread.start()
+                for thread in threads:
+                    thread.start()
 
-            for thread in threads:
-                thread.join()
+                for thread in threads:
+                    thread.join()
 
-            for (segment1_id, segment2_id) in linking_results.items():
-                if not self.does_link_between_media_record_segments_exist(segment1_id,
-                                                                          segment2_id,
-                                                                          content_id):
-                    self.segment_database.insert_media_record_segment_link(content_id,
-                                                                           segment1_id,
-                                                                           segment2_id)
+                for (segment1_id, segment2_id) in linking_results.items():
+                    if not self.does_link_between_media_record_segments_exist(segment1_id,
+                                                                              segment2_id,
+                                                                              content_id):
+                        self.segment_database.insert_media_record_segment_link(content_id,
+                                                                               segment1_id,
+                                                                               segment2_id)
 
-            self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
-                                                                       IngestionEntityTypeDbType.MEDIA_CONTENT,
-                                                                       IngestionStateDbType.DONE)
-            _logger.info("Generated content media record links for content "
-                         + str(content_id) + " in " + str(time.time() - start_time) + " seconds.")
+                self.ingestion_state_database.upsert_entity_ingestion_info(content_id,
+                                                                           IngestionEntityTypeDbType.MEDIA_CONTENT,
+                                                                           IngestionStateDbType.DONE)
+                _logger.info("Generated content media record links for content "
+                             + str(content_id) + " in " + str(time.time() - start_time) + " seconds.")
+            except Exception as e:
+                _logger.exception("Error while processing generate_content_media_record_links queue task", e)
 
         # priority of media record link generation needs to be higher than that of media record ingestion (higher
         # priority items are processed last), so that the media records which are being linked have been processed

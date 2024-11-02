@@ -57,12 +57,8 @@ lecture_llm_generator:
     # Hyperparameters passed to the model at inference-time
     hyperparameters:
       max_new_tokens: 2000
-      temperature: 0.6
-      top_p: 0.1
-      top_k: 40
-      typical_p: 1
-      min_p: 0
-      repetition_penalty: 0.85
+      do_sample: false
+      repetition_penalty: 1.15
     # The prompt given to the model for this task. {json_input} is automatically replaced by a stringified JSON array
     # containing an entry for each segment extracted from the video. {json_schema} is automatically replaced by a
     # JSON schema definition of the expected output the LLM should give.
@@ -87,16 +83,12 @@ lecture_llm_generator:
     # for inference
     base_model_path: "./llm_data/models/Meta-Llama-3.1-8B-Instruct"
     # path to the folder containing the llm lora adapter which should be used for inference
-    lora_model_path: "./llm_data/loras/llama-3-1-8B-instruct-titles"
+    lora_model_path: null
     # Hyperparameters passed to the model at inference-time
     hyperparameters:
       max_new_tokens: 300
-      temperature: 0.4
-      top_p: 0.1
-      top_k: 40
-      typical_p: 1
-      min_p: 0
-      repetition_penalty: 1.2
+      do_sample: false
+      repetition_penalty: 1.1
       exponential_decay_length_penalty: !!python/tuple [300,2.5]
     # The prompt given to the model for this task. {text_input} is automatically replaced by the extracted text from
     # the document.
