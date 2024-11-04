@@ -1,13 +1,9 @@
 import gc
 import json
 from collections import OrderedDict
-from typing import Annotated, Optional
-
+import time
 import pydantic
 import torch.cuda
-from annotated_types import Len
-from pydantic import StringConstraints, RootModel
-
 import config
 from fileextractlib.DocumentData import DocumentData
 from fileextractlib.LlamaRunner import LlamaRunner
@@ -45,6 +41,8 @@ class LectureLlmGenerator:
             llama_runner = self.__title_llama_runner
         else:
             llama_runner = LectureLlmGenerator.__load_title_llama_runner()
+
+        start_time = time.time()
 
         current_segment_index = 0
         while current_segment_index < len(video_data.segments):
@@ -106,6 +104,8 @@ class LectureLlmGenerator:
             else:
                 return
 
+        _logger.info("Generated titles for video in " + str(time.time() - start_time) + " seconds.")
+
         # if we don't want to keep the model loaded, get rid of it ASAP
         if not config.current["lecture_llm_generator"]["keep_models_loaded"]:
             del llama_runner
@@ -125,9 +125,16 @@ class LectureLlmGenerator:
         else:
             llama_runner = LectureLlmGenerator.__load_summarization_llama_runner()
 
+        start_time = time.time()
+
         answer_text = llama_runner.generate_text(
             prompt=prompt,
             pipeline_args=config.current["lecture_llm_generator"]["document_summary_generator"]["hyperparameters"])
+
+        answer_text = answer_text[len(prompt):]
+
+        _logger.info("Generated summary for document in %s seconds: %s",
+                     str(time.time() - start_time), answer_text)
 
         # if we don't want to keep the model loaded, get rid of it ASAP
         if not config.current["lecture_llm_generator"]["keep_models_loaded"]:
@@ -135,9 +142,6 @@ class LectureLlmGenerator:
             gc.collect()
             torch.cuda.empty_cache()
 
-        answer_text = answer_text[len(prompt):]
-
-        _logger.info("Generated summary for document: %s", answer_text)
         document_data.summary = [answer_text]
 
     @staticmethod

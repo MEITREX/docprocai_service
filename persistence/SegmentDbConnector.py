@@ -21,8 +21,11 @@ class SegmentDbConnector:
 
         # ensure database tables exist
         # table which contains the sections of all documents including their text, page number, and text embedding
+        # We need to insert the argument into the string directly because postgres doesn't support parameterized
+        # type parameters
+        # noinspection PyTypeChecker
         self.db_connection.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS document_segments (
               id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
               media_record_id uuid,
@@ -30,12 +33,13 @@ class SegmentDbConnector:
               page int,
               thumbnail bytea,
               title text,
-              embedding vector(%(dimensionality)s)
+              embedding vector({embedding_dimensionality})
             );
-            """, {"dimensionality": embedding_dimensionality})
+            """)
         # table which contains the sections of all videos including their screen text, transcript, start time
+        # noinspection PyTypeChecker
         self.db_connection.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS video_segments (
               id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
               media_record_id uuid,
@@ -44,19 +48,20 @@ class SegmentDbConnector:
               start_time int,
               thumbnail bytea,
               title text,
-              embedding vector(%(dimensionality)s)
+              embedding vector({embedding_dimensionality})
             );
-            """, {"dimensionality": embedding_dimensionality})
+            """)
         # table which contains links between segments of assessment textual representations
+        # noinspection PyTypeChecker
         self.db_connection.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS assessment_segments (
                 task_id uuid PRIMARY KEY,
                 assessment_id uuid,
                 text text,
-                embedding vector(%(dimensionality)s)
+                embedding vector({embedding_dimensionality})
             );
-            """, {"dimensionality": embedding_dimensionality}
+            """
         )
         # table which contains links between segments of different media records
         # we can't use foreign keys here because the segments live in multiple tables
