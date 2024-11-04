@@ -11,6 +11,9 @@ import io
 from webvtt import WebVTT, Caption
 
 import config
+import logging
+
+_logger = logging.getLogger(__name__)
 
 class TranscriptGenerator:
     """
@@ -78,7 +81,7 @@ class TranscriptGenerator:
             )
             vtt.captions.append(caption)
 
-        print("Processed text in " + str(end_time - start_time) + " seconds.")
+        _logger.info("Generated transcript in " + str(end_time - start_time) + " seconds.")
         return vtt
         
 

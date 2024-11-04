@@ -11,7 +11,10 @@ import PIL.Image
 import PIL.ImageEnhance
 import io
 from fileextractlib.VideoData import VideoData, VideoSegmentData
+import time
+import logging
 
+_logger = logging.getLogger(__name__)
 
 class VideoProcessor:
     """
@@ -76,6 +79,8 @@ class VideoProcessor:
 
         # delete ffmpeg output, we don't need it anymore
         del out
+
+        start_time = time.time()
 
         # we will now create longer segments from our captions. Captions usually have a length of a sentence or a part
         # of a sentence.
@@ -166,5 +171,7 @@ class VideoProcessor:
         segments.append(current_segment)
 
         video_data = VideoData(vtt, segments)
+
+        _logger.info("Segmented video in " + str(time.time() - start_time) + " seconds.")
 
         return video_data
