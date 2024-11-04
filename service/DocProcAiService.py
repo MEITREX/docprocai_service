@@ -110,7 +110,6 @@ class DocProcAiService:
                     for segment in document_data.pages:
                         thumbnail_bytes = io.BytesIO()
                         segment.thumbnail.save(thumbnail_bytes, format="JPEG", quality=93)
-                        # TODO: Fill placeholder title
                         self.segment_database.insert_document_segment(segment.text,
                                                                       media_record_id,
                                                                       segment.page_number,
@@ -680,10 +679,13 @@ class DocProcAiService:
                                                     media_record_id,
                                                     segment,
                                                     media_records_segments) -> None:
+        """
+        Helper function which matches a segment against the segments of other media records to find the most similar
+        segment. If a segment is found which is similar enough, a link is added to the linking_results dictionary.
+        """
         # get the text of the segment
         segment_thumbnail = PIL.Image.open(io.BytesIO(segment.thumbnail))
 
-        # TODO: Only crop if video
         cropped_segment_thumbnail = segment_thumbnail.crop((
             segment_thumbnail.width * 1 / 4, segment_thumbnail.height * 3 / 4,
             segment_thumbnail.width * 5 / 6, segment_thumbnail.height * 9 / 10))

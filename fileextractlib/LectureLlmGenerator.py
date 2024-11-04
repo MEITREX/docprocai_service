@@ -113,6 +113,10 @@ class LectureLlmGenerator:
             torch.cuda.empty_cache()
 
     def generate_summary_for_document(self, document_data: DocumentData) -> None:
+        """
+        Generates a summary for the passed document data. Modifies the summary field in the passed document data.
+        """
+
         text_input = "\n\n\n--- Page Break ---\n\n\n".join((x.text for x in document_data.pages))
 
         prompt = (config.current["lecture_llm_generator"]["document_summary_generator"]["prompt"]

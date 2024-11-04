@@ -13,6 +13,10 @@ from utils import does_dict_match_typed_dict
 
 
 class GraphQLController:
+    """
+    Controller for the GraphQL API. This controller is responsible for the GraphQL endpoints as defined in the schema.
+    """
+
     def __init__(self, app: FastAPI, ai_service: DocProcAiService):
         self.ai_service = ai_service
 
