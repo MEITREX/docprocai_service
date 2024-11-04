@@ -21,6 +21,12 @@ class PdfProcessor:
         tika.initVM()
 
     def process_from_io(self, file: typing.BinaryIO) -> DocumentData:
+        """
+        Processes the given pdf file into raw text, with each page as a separate entry in the DocumentData object.
+        :param file: The pdf file to process
+        :return: A DocumentData object containing the raw text of each page
+        """
+
         start_time = time.time()
 
         # create thumbnail images for each page

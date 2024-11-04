@@ -40,6 +40,13 @@ class LlamaRunner:
         )
 
     def generate_text(self, prompt: str, answer_schema=None, pipeline_args=None) -> str:
+        """
+        Generates text from the given prompt.
+        :param prompt: Prompt to generate text from.
+        :param answer_schema: If not None, the schema which the generated text must adhere to.
+        :param pipeline_args: Additional pipeline arguments to pass to the pipeline.
+        :return: The generated text.
+        """
         if pipeline_args is None:
             pipeline_args = []
 
