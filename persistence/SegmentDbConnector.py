@@ -6,10 +6,14 @@ from pgvector.psycopg import register_vector
 
 from persistence.entities import *
 
+import config
+
 
 class SegmentDbConnector:
     def __init__(self, db_connection: psycopg.Connection):
         self.db_connection: psycopg.Connection = db_connection
+
+        embedding_dimensionality = config.current["text_embedding"]["dimensionality"]
 
         # ensure pgvector extension is installed, we need it to store text embeddings
         self.db_connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
@@ -26,9 +30,9 @@ class SegmentDbConnector:
               page int,
               thumbnail bytea,
               title text,
-              embedding vector(1024)
+              embedding vector(%(dimensionality)s)
             );
-            """)
+            """, {"dimensionality": embedding_dimensionality})
         # table which contains the sections of all videos including their screen text, transcript, start time
         self.db_connection.execute(
             """
@@ -40,9 +44,9 @@ class SegmentDbConnector:
               start_time int,
               thumbnail bytea,
               title text,
-              embedding vector(1024)
+              embedding vector(%(dimensionality)s)
             );
-            """)
+            """, {"dimensionality": embedding_dimensionality})
         # table which contains links between segments of assessment textual representations
         self.db_connection.execute(
             """
@@ -50,9 +54,9 @@ class SegmentDbConnector:
                 task_id uuid PRIMARY KEY,
                 assessment_id uuid,
                 text text,
-                embedding vector(1024)
+                embedding vector(%(dimensionality)s)
             );
-            """
+            """, {"dimensionality": embedding_dimensionality}
         )
         # table which contains links between segments of different media records
         # we can't use foreign keys here because the segments live in multiple tables
