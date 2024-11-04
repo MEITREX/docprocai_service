@@ -10,6 +10,8 @@ This service is designed to process and manage uploaded lecture material (video 
 * Semantic search/fetching of semantically similar sections of lecture material
 * Automatic generation of section titles for the video sections generated
 
+For a deeper dive into the features and considerations made during development, check out our paper on *DocProcAI*.
+
 ## Installation
 This service requires pytorch to function. As pytorch GPU-support is required for some features of this service, the pip-distributed version of pytorch cannot be used and instead a
 platform-specific version has to be used.
@@ -21,7 +23,7 @@ the install script located in the `Dockerfile`.
 > 
 > Docker does not provide GPU-support for MacOS at this point in time, thus GPU-features of the service do not function on MacOS.
 >
->  GPU features can be disabled using the `config.yaml`.
+>  GPU features can be disabled using the `config.yaml`. Additionally, it might be necessary to change the `docker-compose.yaml` file and remove the GPU device reservation.
 
 ## Configuration
 The service uses the `config.yaml` file located in the root directory for configuration.
