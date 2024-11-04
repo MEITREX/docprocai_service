@@ -112,33 +112,7 @@ class LectureLlmGenerator:
             gc.collect()
             torch.cuda.empty_cache()
 
-
-
-    def generate_summary_for_video(self, video_data: VideoData) -> None:
-
-        # TODO: Disabled for now
-        return
-
-        json_input = [{
-            "start_time": x.start_time,
-            "transcript": x.transcript,
-            "screen_text": x.screen_text
-        } for x in video_data.segments]
-
-        prompt = """
-                
-                """.format(json_input=json.dumps(json_input, indent=4, ensure_ascii=False),
-                           json_schema=self.__summary_answer_schema)
-
-        answer_json = self.__generate_answer_json(prompt, self.__summary_answer_schema)
-        video_data.summary = answer_json
-
     def generate_summary_for_document(self, document_data: DocumentData) -> None:
-        #json_input = [{
-        #    "page_no": x.page_number,
-        #    "text": x.text
-        #} for x in document_data.pages]
-
         text_input = "\n\n\n--- Page Break ---\n\n\n".join((x.text for x in document_data.pages))
 
         prompt = (config.current["lecture_llm_generator"]["document_summary_generator"]["prompt"]

@@ -155,10 +155,6 @@ class DocProcAiService:
                                                                    segment.start_time, thumbnail_bytes.getvalue(),
                                                                    segment.title, segment.embedding)
 
-                    if config.current["lecture_llm_generator"]["document_summary_generator"]["enabled"]:
-                        # generate and store a summary of this media record
-                        self.__lecture_llm_generator.generate_summary_for_video(video_data)
-
                     # store media record-level data: summary & closed captions vtt string
                     self.media_record_info_database.upsert_media_record_info(media_record_id,
                                                                              video_data.summary,
