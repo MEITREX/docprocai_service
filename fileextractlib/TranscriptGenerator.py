@@ -10,6 +10,7 @@ import io
 
 from webvtt import WebVTT, Caption
 
+import config
 
 class TranscriptGenerator:
     """
@@ -22,7 +23,8 @@ class TranscriptGenerator:
 
         :param whisper_model: OpenAI whisper model name, defaults to "base"
         """
-        self.model: whisper.Whisper = whisper.load_model(name=whisper_model)
+        self.model: whisper.Whisper = whisper.load_model(name=config.current["transcript_generation"]["whisper_model"],
+                                                         device=config.current["transcript_generation"]["device"])
 
     def process_to_vtt(self, file_name: str) -> WebVTT:
         """
@@ -94,41 +96,4 @@ class TranscriptGenerator:
         with io.StringIO() as f:
             vtt.write(f)
             f.seek(0)
-            return f.read() 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("--infile")
-    parser.add_argument("--outfile")
-    parser.add_argument("--indir")
-    parser.add_argument("--outdir")
-    args = parser.parse_args()
-    processor = TranscriptGenerator()
-
-    if args.infile is not None and args.indir is not None:
-        raise ValueError("Cannot specify both infile and indir. Either process a single file or batch process a folder")
-    
-    if args.infile is not None:
-        if args.outfile is None:
-            raise ValueError("Must specify outfile when specifying infile")
-        
-        result = processor.process(args.infile)
-        with open(args.outfile, "w") as f:
-            f.write(result)
-    elif args.indir is not None:
-        if args.outdir is None:
-            raise ValueError("Must specify outdir when specifying indir")
-        
-        # process all files in the directory and its subdirectories
-        for root, dirs, files in os.walk(args.indir):
-            relpath: str = path.relpath(root, args.indir)
-            for file in files:
-                file_path: str = path.join(root, file)
-                out_dir: str = path.join(args.outdir, relpath)
-                if not os.path.exists(out_dir):
-                    os.makedirs(out_dir)
-                out_path: str = path.join(out_dir, file + ".vtt")
-                result = processor.process(file_path)
-                with open(out_path, "w") as f:
-                    f.write(result)
+            return f.read()

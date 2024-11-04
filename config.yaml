@@ -8,6 +8,13 @@ database:
   # Connection string to the database
   connection_string: "user=root password=root host=database port=5432 dbname=docprocai_service"
 
+# Settings pertaining to the transcript generation for videos
+transcript_generation:
+  # Name or path to folder containing the whisper model to use.
+  whisper_model: "base"
+  # Which device to use for inference. Can be "cpu" or "cuda"
+  device: "cpu"
+
 # Settings pertaining to the video segmentation step during the content processing pipeline
 video_segmentation:
   # The threshold of how similar the current frame of the video has to be compared to the last to be considered
