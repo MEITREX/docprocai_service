@@ -9,7 +9,7 @@ from dto import AiEntityProcessingProgressDto
 from service.DocProcAiService import DocProcAiService
 import dto
 
-from util import does_dict_match_typed_dict
+from utils import does_dict_match_typed_dict
 
 
 class GraphQLController:

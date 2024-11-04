@@ -1,8 +1,6 @@
 from functools import singledispatch
-from persistence.entities import *
 import base64
 from dto import *
-from util import ensure_type
 
 @singledispatch
 def entity_to_dto(entity):
