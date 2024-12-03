@@ -13,9 +13,9 @@ This service is designed to process and manage uploaded lecture material (video 
 For a deeper dive into the features and considerations made during development, check out our paper on *DocProcAI*.
 
 ## Installation
-### Additional Installation Steps
+### Neural Netowrk Models Installation
 This service requires neural network models to function at all. These models need to be downloaded and placed into a `llm_data` folder in the root. This folder is then mounted in the docker container
-automatically and can the files inside can then be referenced as seen in the `config.yaml`
+automatically and the files inside can then be referenced as seen in the `config.yaml`
 
 > [!CAUTION]
 > The service cannot run without at least a sentence embedding model installed!
@@ -23,6 +23,11 @@ automatically and can the files inside can then be referenced as seen in the `co
 > [!TIP]
 > The `segment_title_generator` and `document_summary_generator` tasks only require LLMs if these features are enabled in the `config.yaml`. They are enabled by default.
 
+### Recommended Neural Network Models
+
+* For the text embedding, we recommend [Alibaba-NLP/gte-large-en-v1.5](https://huggingface.co/Alibaba-NLP/gte-large-en-v1.5)
+* For the title and summary generation, we recommend [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
+* While the title generation should work with just a base model, we recommend our custom fine-tuned LoRA Adapter for better results in the title generation task. The adapter files may be provided to you upon request.
 
 ### GPU Acceleration
 This service requires pytorch to function. As pytorch GPU-support is required for some features of this service, the pip-distributed version of pytorch cannot be used and instead a
@@ -40,3 +45,6 @@ the install script located in the `Dockerfile`.
 ## Configuration
 The service uses the `config.yaml` file located in the root directory for configuration.
 For further information about configuration check out this file, all configuration properties are explained using in-file comments.
+
+## REsource Requirements, Additional Information & Design Rationale
+For additional information on the design and implementation of this service, check out the [accompanying paper](paper.pdf).
