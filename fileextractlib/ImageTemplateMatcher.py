@@ -78,14 +78,18 @@ if __name__ == "__main__":
     template = Image.open(template_file)
     image = Image.open(image_file)
 
-    template = template.crop(
-        (template.width / 6, template.height / 10, template.width * 5 / 6, template.height * 9 / 10))
+    cropped_template = template.crop((
+        template.width * 1 / 4, template.height * 1 / 10,
+        template.width * 3 / 4, template.height * 9 / 10))
 
-    matcher = ImageTemplateMatcher(template=template,
+    size_ratio = template.height / image.height
+    other_segment_thumbnail = image.resize(
+        (int(image.width * size_ratio), int(image.height * size_ratio)))
+
+    matcher = ImageTemplateMatcher(template=cropped_template,
                                    scaling_factor=args.scaling,
                                    enable_multi_scale_matching=True,
-                                   multi_scale_matching_steps=20,
-                                   multi_scale_matching_max_scale=3.5)
+                                   multi_scale_matching_steps=150)
 
-    print("Similarity: ", matcher.match(image))
+    print("Similarity: ", matcher.match(other_segment_thumbnail))
     print("Matching took: " + str(time.time() - start_time) + " seconds.")

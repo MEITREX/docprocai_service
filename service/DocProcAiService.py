@@ -299,8 +299,9 @@ class DocProcAiService:
                 # get the ids of the media records which are part of this content
                 media_record_ids = await self.__media_service_client.get_media_record_ids_of_contents([content_id])
 
-                # we could first run a query to check if any records even match, but considering that linking usually only
-                # happens after ingestion, we can assume that the records exist, so that would be an unnecessary query
+                # we could first run a query to check if any records even match, but considering that linking usually
+                # only happens after ingestion, we can assume that the records exist, so that would be an unnecessary
+                # query
                 # From the returned list, create a dict sorted by which segment is associated with which media record
                 media_records_segments: dict[uuid.UUID, list[DocumentSegmentEntity | VideoSegmentEntity]] = {}
                 for result in self.segment_database.get_media_record_segments_by_media_record_ids(media_record_ids):
@@ -314,15 +315,25 @@ class DocProcAiService:
                 threads: list[threading.Thread] = []
                 for media_record_id, segments in reversed(media_records_segments.items()):
                     for segment in segments:
+                        # only process video segments
+                        if not isinstance(segment, VideoSegmentEntity):
+                            continue
+
                         threads.append(
                             threading.Thread(target=DocProcAiService.__match_segment_against_other_media_records,
                                              args=(linking_results, media_record_id, segment, media_records_segments)))
 
-                for thread in threads:
-                    thread.start()
+                max_threads: int = config.current["content_linking"]["linking_processing_max_threads"]
+                while len(threads) > 0:
+                    # take the first max_threads threads and start them (or less if there are less than max_threads)
+                    current_threads = threads[:max_threads]
+                    threads = threads[max_threads:]
 
-                for thread in threads:
-                    thread.join()
+                    for thread in current_threads:
+                        thread.start()
+
+                    for thread in current_threads:
+                        thread.join()
 
                 for (segment1_id, segment2_id) in linking_results.items():
                     if not self.does_link_between_media_record_segments_exist(segment1_id,
@@ -687,14 +698,14 @@ class DocProcAiService:
         segment_thumbnail = PIL.Image.open(io.BytesIO(segment.thumbnail))
 
         cropped_segment_thumbnail = segment_thumbnail.crop((
-            segment_thumbnail.width * 1 / 4, segment_thumbnail.height * 3 / 4,
-            segment_thumbnail.width * 5 / 6, segment_thumbnail.height * 9 / 10))
+            segment_thumbnail.width * 1 / 4, segment_thumbnail.height * 1 / 10,
+            segment_thumbnail.width * 3 / 4, segment_thumbnail.height * 9 / 10))
 
         image_template_matcher = ImageTemplateMatcher(
             template=cropped_segment_thumbnail,
-            scaling_factor=0.4,
+            scaling_factor=config.current["content_linking"]["linking_image_scaling_factor"],
             enable_multi_scale_matching=True,
-            multi_scale_matching_steps=40
+            multi_scale_matching_steps=config.current["content_linking"]["linking_image_similarity_steps"]
         )
 
         # go through each other media record's segments

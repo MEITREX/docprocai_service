@@ -146,6 +146,9 @@ class LectureLlmGenerator:
             gc.collect()
             torch.cuda.empty_cache()
 
+        # remove preceding line breaks
+        answer_text = answer_text.lstrip()
+
         document_data.summary = [answer_text]
 
     @staticmethod
