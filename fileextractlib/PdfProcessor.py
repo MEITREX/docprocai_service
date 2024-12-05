@@ -19,6 +19,7 @@ class PdfProcessor:
 
     def __init__(self):
         tika.initVM()
+        tika_config.getParsers()
 
     def process_from_io(self, file: typing.BinaryIO) -> DocumentData:
         """
@@ -47,7 +48,13 @@ class PdfProcessor:
             with io.BytesIO() as page_pdf_bytes:
                 page_pdf_writer.write(page_pdf_bytes)
                 page_pdf_bytes.seek(0)
-                page_text = tika.parser.from_buffer(page_pdf_bytes)["content"].strip()
+                page_text = tika.parser.from_buffer(page_pdf_bytes,
+                                                    headers={ "X-Tika-PDFextractInlineImages": "true" })["content"]
+
+                if page_text is None:
+                    continue
+
+                page_text = page_text.strip()
 
                 if page_text == "":
                     continue
