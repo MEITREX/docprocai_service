@@ -1,7 +1,7 @@
 ffmpeg-python
 pytesseract
 transformers
-bitsandbytes
+bitsandbytes==0.44.1
 pydantic
 lm-format-enforcer
 webvtt-py
