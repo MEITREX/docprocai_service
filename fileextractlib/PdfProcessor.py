@@ -19,7 +19,6 @@ class PdfProcessor:
 
     def __init__(self):
         tika.initVM()
-        tika_config.getParsers()
 
     def process_from_io(self, file: typing.BinaryIO) -> DocumentData:
         """
