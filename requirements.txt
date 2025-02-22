@@ -1,6 +1,6 @@
 ffmpeg-python
 pytesseract
-transformers
+transformers==4.48.3
 bitsandbytes==0.44.1
 pydantic
 lm-format-enforcer
