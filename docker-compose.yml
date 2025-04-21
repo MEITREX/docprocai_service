@@ -1,7 +1,7 @@
 services:
   database:
     image: pgvector/pgvector:pg16
-    restart: always
+    restart: unless-stopped
     expose:
       - 5432
     ports:
@@ -17,7 +17,7 @@ services:
     build:
       context: ./../docprocai_service
       dockerfile: Dockerfile
-    restart: always
+    restart: unless-stopped
     container_name: docprocai_service
     volumes:
       - "./../docprocai_service/llm_data:/app/llm_data"
