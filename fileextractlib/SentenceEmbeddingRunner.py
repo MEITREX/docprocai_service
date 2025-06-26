@@ -23,9 +23,9 @@ class SentenceEmbeddingRunner:
     def generate_embeddings(self, words: List[str]) -> NDArray[float]:
 
         """
-        This method accepts a list of strings for which it computes an embedding vector.
+        This method accepts a list of strings and computes for each its respective embedding vector.
         :param words: a list of words for which the respective embeddings shall be computed.
-        :return: a list of the respective embeddings.
+        :return: a list of embeddings vectors.
         """
         response = requests.get(self._create_url(words))
         response.raise_for_status()
