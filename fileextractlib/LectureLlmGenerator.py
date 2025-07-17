@@ -2,13 +2,17 @@ import gc
 import json
 from collections import OrderedDict
 import time
+from typing import Optional
+
 import pydantic
 import torch.cuda
 import config
 from fileextractlib.DocumentData import DocumentData
-from fileextractlib.LlamaRunner import LlamaRunner
+from fileextractlib.LLMService import LlamaRunner, LLMProfile, SEGMENT_TITLE_GENERATOR_PROFILE, Hyperparameter
 from fileextractlib.VideoData import VideoData
 import logging
+
+from LLMService import DefaultLLMService, DOCUMENT_SUMMARY_GENERATOR_PROFILE
 
 _logger = logging.getLogger(__name__)
 
@@ -36,11 +40,6 @@ class LectureLlmGenerator:
         the segments of the passed video data. Does not return anything
         :param video_data: The video data of the video to generate segment titles for.
         """
-
-        if config.current["lecture_llm_generator"]["keep_models_loaded"]:
-            llama_runner = self.__title_llama_runner
-        else:
-            llama_runner = LectureLlmGenerator.__load_title_llama_runner()
 
         start_time = time.time()
 
@@ -71,12 +70,19 @@ class LectureLlmGenerator:
                       .format(json_input=json.dumps(prompt_input, indent=4, ensure_ascii=False),
                                json_schema=answer_schema))
 
+            temp: float = config.current["lecture_llm_generator"]["segment_title_generator"]["hyperparameters"]["temperature"]
+            repetition_penalty: float = config.current["lecture_llm_generator"]["segment_title_generator"]["hyperparameters"]["repetition_penalty"]
+            max_new_token_count: int = config.current["lecture_llm_generator"]["segment_title_generator"]["hyperparameters"]["max_new_tokens"]
+            hyperparameter = Hyperparameter(temp, repetition_penalty, max_new_token_count)
+
             # get the answer json, force the LLM to conform to our json schema
             answer_json = LectureLlmGenerator.__generate_answer_json(
-                llama_runner,
+                DefaultLLMService(),
                 prompt,
                 answer_schema,
-                pipeline_args=config.current["lecture_llm_generator"]["segment_title_generator"]["hyperparameters"])
+                profile = SEGMENT_TITLE_GENERATOR_PROFILE,
+                hyperparameter=hyperparameter
+            )
             for (key, value) in answer_json.items():
                 next(x for x in video_data.segments if x.start_time == int(key)).title = value
 
@@ -106,11 +112,6 @@ class LectureLlmGenerator:
 
         _logger.info("Generated titles for video in " + str(time.time() - start_time) + " seconds.")
 
-        # if we don't want to keep the model loaded, get rid of it ASAP
-        if not config.current["lecture_llm_generator"]["keep_models_loaded"]:
-            del llama_runner
-            gc.collect()
-            torch.cuda.empty_cache()
 
     def generate_summary_for_document(self, document_data: DocumentData) -> None:
         """
@@ -124,27 +125,18 @@ class LectureLlmGenerator:
 
         _logger.info("Generating summary for document.")
 
-        if config.current["lecture_llm_generator"]["keep_models_loaded"]:
-            llama_runner = self.__summarization_llama_runner
-        else:
-            llama_runner = LectureLlmGenerator.__load_summarization_llama_runner()
-
         start_time = time.time()
 
-        answer_text = llama_runner.generate_text(
-            prompt=prompt,
-            pipeline_args=config.current["lecture_llm_generator"]["document_summary_generator"]["hyperparameters"])
+        temp: float = config.current["lecture_llm_generator"]["document_summary_generator"]["hyperparameters"]["temperature"]
+        repetition_penalty: float = config.current["lecture_llm_generator"]["document_summary_generator"]["hyperparameters"]["repetition_penalty"]
+        max_new_token_count: int = config.current["lecture_llm_generator"]["document_summary_generator"]["hyperparameters"]["max_new_tokens"]
+        hyperparameter = Hyperparameter(temp, repetition_penalty, max_new_token_count)
+        answer_text = DefaultLLMService().run_custom(prompt, None, DOCUMENT_SUMMARY_GENERATOR_PROFILE, hyperparameter)
 
         answer_text = answer_text[len(prompt):]
 
         _logger.info("Generated summary for document in %s seconds: %s",
                      str(time.time() - start_time), answer_text)
-
-        # if we don't want to keep the model loaded, get rid of it ASAP
-        if not config.current["lecture_llm_generator"]["keep_models_loaded"]:
-            del llama_runner
-            gc.collect()
-            torch.cuda.empty_cache()
 
         # remove preceding line breaks
         answer_text = answer_text.lstrip()
@@ -152,8 +144,9 @@ class LectureLlmGenerator:
         document_data.summary = [answer_text]
 
     @staticmethod
-    def __generate_answer_json(llama_runner: LlamaRunner, prompt, answer_schema: dict[str, any], pipeline_args: dict) -> any:
-        generated_text = llama_runner.generate_text(prompt, answer_schema, pipeline_args)
+    def __generate_answer_json(llm_service: DefaultLLMService, prompt, answer_schema: dict[str, any], profile: Optional[LLMProfile], hyperparameter: Optional[Hyperparameter]) -> any:
+
+        generated_text = llm_service.run_custom(prompt, json.dumps(answer_schema), profile, hyperparameter)
 
         # generated text includes the prompt we gave as a prefix. Remove it
         generated_text = generated_text.removeprefix(prompt)
