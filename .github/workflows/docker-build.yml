@@ -22,7 +22,7 @@ jobs:
       - name: Build docker container
         uses: docker/build-push-action@v5
         with:
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        #  cache-from: type=gha
+        #  cache-to: type=gha,mode=max
           tags: ghcr.io/meitrex/docprocai_service:latest
           push: true
