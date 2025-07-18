@@ -246,7 +246,7 @@ class DocProcAiService:
                 sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
 
                 for task_information in task_information_list:
-                    embedding: NDArray[np.float_] = sentence_embedding_runner.generate_embeddings(
+                    embedding: NDArray[np.float64] = sentence_embedding_runner.generate_embeddings(
                         [task_information["textualRepresentation"]])[0]
 
                     self.segment_database.upsert_assessment_segment(task_information["taskId"],
