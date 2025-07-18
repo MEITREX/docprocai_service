@@ -1,6 +1,6 @@
 # URL to the graphql endpoint of the media service. This is used to fetch information about media records the service
 # needs to process
-media_service_url: "http://app-media:3001/graphql"
+media_service_url: "http://localhost:3500/v1.0/invoke/docprocai-service/method/graphql"
 
 # Settings pertaining to the database connection of the service. Note that the service expects a postgresql database
 # with the pgvector extension installed
