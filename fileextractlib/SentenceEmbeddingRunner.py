@@ -1,10 +1,9 @@
 from typing import List
 
-import yaml
-import urllib
+import urllib.parse
 import requests
 import numpy as np
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 import config
 
 
@@ -20,8 +19,7 @@ class SentenceEmbeddingRunner:
         query_string = urllib.parse.urlencode(query_params)
         return f"{self.protocol}://{self.hostname}:{self.port}/embed?{query_string}"
 
-    def generate_embeddings(self, words: List[str]) -> NDArray[float]:
-
+    def generate_embeddings(self, words: List[str]) -> NDArray[np.float_]:
         """
         This method accepts a list of strings and computes for each its respective embedding vector.
         :param words: a list of words for which the respective embeddings shall be computed.

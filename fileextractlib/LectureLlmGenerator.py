@@ -2,13 +2,12 @@ import gc
 import json
 from collections import OrderedDict
 import time
-from typing import Optional
+from typing import Optional, Any
 
 import pydantic
-import torch.cuda
 import config
 from fileextractlib.DocumentData import DocumentData
-from fileextractlib.LLMService import LlamaRunner, LLMProfile, SEGMENT_TITLE_GENERATOR_PROFILE, Hyperparameter
+from fileextractlib.LLMService import LLMProfile, SEGMENT_TITLE_GENERATOR_PROFILE, Hyperparameter
 from fileextractlib.VideoData import VideoData
 import logging
 
@@ -17,23 +16,6 @@ from LLMService import DefaultLLMService, DOCUMENT_SUMMARY_GENERATOR_PROFILE
 _logger = logging.getLogger(__name__)
 
 class LectureLlmGenerator:
-    def __init__(self):
-        if config.current["lecture_llm_generator"]["keep_models_loaded"]:
-            # if the config says that both llm generators shall use the same base & lora models, then we don't need to
-            # load both but can instead just use the same runner for both tasks
-            if ((config.current["lecture_llm_generator"]["segment_title_generator"]["base_model_path"] ==
-                config.current["lecture_llm_generator"]["document_summary_generator"]["base_model_path"]) and
-                (config.current["lecture_llm_generator"]["segment_title_generator"]["lora_model_path"] ==
-                 config.current["lecture_llm_generator"]["document_summary_generator"]["lora_model_path"])):
-                # our unified runner for both tasks, just use the title runner, both are identical anyway
-                unified_runner = LectureLlmGenerator.__load_title_llama_runner()
-                self.__summarization_llama_runner = unified_runner
-                self.__title_llama_runner = unified_runner
-            else:
-                # otherwise, we'll have to load them separately
-                self.__summarization_llama_runner = LectureLlmGenerator.__load_summarization_llama_runner()
-                self.__title_llama_runner = LectureLlmGenerator.__load_title_llama_runner()
-
     def generate_titles_for_video(self, video_data: VideoData) -> None:
         """
         Uses an LLM to generate appropriate titles for the segments of the passed videos. Modifies the title field in
@@ -144,7 +126,7 @@ class LectureLlmGenerator:
         document_data.summary = [answer_text]
 
     @staticmethod
-    def __generate_answer_json(llm_service: DefaultLLMService, prompt, answer_schema: dict[str, any], profile: Optional[LLMProfile], hyperparameter: Optional[Hyperparameter]) -> any:
+    def __generate_answer_json(llm_service: DefaultLLMService, prompt, answer_schema: dict[str, Any], profile: Optional[LLMProfile], hyperparameter: Optional[Hyperparameter]) -> Any:
 
         generated_text = llm_service.run_custom(prompt, json.dumps(answer_schema), profile, hyperparameter)
 
@@ -157,15 +139,3 @@ class LectureLlmGenerator:
             return answer_json
         except ValueError as e:
             _logger.exception("Error while parsing LLM answer json.", exc_info=e)
-
-    @staticmethod
-    def __load_summarization_llama_runner() -> LlamaRunner:
-        return LlamaRunner(
-            config.current["lecture_llm_generator"]["document_summary_generator"]["base_model_path"],
-            config.current["lecture_llm_generator"]["document_summary_generator"]["lora_model_path"])
-
-    @staticmethod
-    def __load_title_llama_runner() -> LlamaRunner:
-        return LlamaRunner(
-            config.current["lecture_llm_generator"]["segment_title_generator"]["base_model_path"],
-            config.current["lecture_llm_generator"]["segment_title_generator"]["lora_model_path"])

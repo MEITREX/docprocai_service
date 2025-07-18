@@ -1,7 +1,8 @@
 import PIL.Image
-from torch import Tensor
 from webvtt import WebVTT
 from typing import Optional
+from numpy.typing import NDArray
+import numpy as np
 
 class VideoSegmentData:
     """
@@ -15,13 +16,13 @@ class VideoSegmentData:
                  screen_text: str,
                  thumbnail: PIL.Image.Image,
                  title: Optional[str],
-                 embedding: Optional[Tensor]):
+                 embedding: Optional[NDArray[np.float_]]):
         self.start_time: int = start_time
         self.transcript: str = transcript
         self.screen_text: str = screen_text
         self.thumbnail: PIL.Image.Image = thumbnail
         self.title = title
-        self.embedding: Tensor = embedding
+        self.embedding: Optional[NDArray[np.float_]] = embedding
 
 
 class VideoData:
@@ -29,7 +30,7 @@ class VideoData:
     Represents a video's data, containing the captions and the sections of the video.
     """
 
-    def __init__(self, vtt: WebVTT, segments: list[VideoSegmentData], summary: list[str] = None):
+    def __init__(self, vtt: WebVTT, segments: list[VideoSegmentData], summary: Optional[list[str]] = None):
         if summary is None:
             summary = []
         self.vtt: WebVTT = vtt
