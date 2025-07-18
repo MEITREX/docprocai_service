@@ -3,7 +3,7 @@ pytesseract
 pydantic
 lm-format-enforcer
 webvtt-py
-numpy == 1.26.4
+numpy
 openai-whisper
 Pillow
 pdf2image
