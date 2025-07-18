@@ -3,7 +3,7 @@ name: Building Docker Image
 on:
   push:
     branches:
-      - 'main'
+      - 'temp-deployment'
 
 jobs:
   docker-build:
