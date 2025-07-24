@@ -1,6 +1,7 @@
 name: Building Docker Image
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - 'remove_old'
