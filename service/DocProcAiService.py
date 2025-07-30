@@ -15,7 +15,6 @@ import client.MediaServiceClient as MediaServiceClient
 import config
 import dto
 import dto.mapper as mapper
-import fileextractlib.LLMService as LlamaRunner
 from fileextractlib.TopicModel import TopicModel
 from dto import MediaRecordSegmentLinkDto, SemanticSearchResultDto, \
     AiEntityProcessingProgressDto, MediaRecordSegmentDto, TaskInformationDto

@@ -11,7 +11,8 @@ from fileextractlib.LLMService import LLMProfile, SEGMENT_TITLE_GENERATOR_PROFIL
 from fileextractlib.VideoData import VideoData
 import logging
 
-from LLMService import DefaultLLMService, DOCUMENT_SUMMARY_GENERATOR_PROFILE
+
+from fileextractlib.LLMService import DefaultLLMService, DOCUMENT_SUMMARY_GENERATOR_PROFILE
 
 _logger = logging.getLogger(__name__)
 
