@@ -1,4 +1,4 @@
-import uuid
+from uuid import UUID
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -10,5 +10,5 @@ class CrudOperation(Enum):
 
 @dataclass
 class ContentChangeEvent:
-    contentIds: list[uuid]
+    contentIds: list[UUID]
     crudOperation: CrudOperation
