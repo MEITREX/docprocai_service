@@ -73,7 +73,7 @@ class SegmentDbConnector:
             """)
 
     def insert_document_segment(self, text: str, media_record_id: UUID, page_index: int,
-                                thumbnail: bytes, title: Optional[str], embedding: NDArray[np.float_]) -> None:
+                                thumbnail: bytes, title: Optional[str], embedding: NDArray[np.float64]) -> None:
         self.db_connection.execute(
             query="""
                   INSERT INTO document_segments (text, media_record_id, page, thumbnail, title, embedding) 
@@ -82,7 +82,7 @@ class SegmentDbConnector:
             params=(text, media_record_id, page_index, thumbnail, title, embedding))
 
     def insert_video_segment(self, screen_text: str, transcript: str, media_record_id: UUID, start_time: int,
-                             thumbnail: bytes, title: str, embedding: NDArray[np.float_]) -> None:
+                             thumbnail: bytes, title: str, embedding: NDArray[np.float64]) -> None:
         self.db_connection.execute(
             query="""
                   INSERT INTO video_segments (
@@ -102,7 +102,7 @@ class SegmentDbConnector:
                                   task_id: UUID,
                                   assessment_id: UUID,
                                   textual_representation: str,
-                                  embedding: NDArray[np.float_]) -> None:
+                                  embedding: NDArray[np.float64]) -> None:
         # Use an upsert here instead of a regular insert because the primary key of the table isn't auto-generated but
         # instead manually set. Not using an upsert might result in exceptions in case we process something twice.
         self.db_connection.execute(
@@ -220,7 +220,7 @@ class SegmentDbConnector:
 
         return result["exists"]
 
-    def get_top_segments_by_embedding_distance(self, query_embedding: NDArray[np.float_],
+    def get_top_segments_by_embedding_distance(self, query_embedding: NDArray[np.float64],
                                                count: int,
                                                parent_id_whitelist: list[UUID]) \
             -> list[SemanticSearchResultEntity]:

@@ -16,7 +16,7 @@ class AssessmentEntity:
 
 class DocumentSegmentEntity:
     def __init__(self, id: UUID, media_record_id: UUID, page_index: int, text: str, thumbnail: bytes, title: str,
-                 embedding: NDArray[np.float_]):
+                 embedding: NDArray[np.float64]):
         self.id = id
         self.media_record_id = media_record_id
         self.page_index = page_index
@@ -28,7 +28,7 @@ class DocumentSegmentEntity:
 
 class VideoSegmentEntity:
     def __init__(self, id: UUID, media_record_id: UUID, start_time: int, transcript: str,
-                 screen_text: str, thumbnail: bytes, title: str, embedding: NDArray[np.float_]):
+                 screen_text: str, thumbnail: bytes, title: str, embedding: NDArray[np.float64]):
         self.id = id
         self.media_record_id = media_record_id
         self.start_time = start_time
@@ -40,7 +40,7 @@ class VideoSegmentEntity:
 
 
 class AssessmentSegmentEntity:
-    def __init__(self, id: UUID, assessment_id: UUID, textual_representation: str, embedding: NDArray[np.float_]):
+    def __init__(self, id: UUID, assessment_id: UUID, textual_representation: str, embedding: NDArray[np.float64]):
         self.id = id
         self.assessment_id = assessment_id
         self.textual_representation = textual_representation

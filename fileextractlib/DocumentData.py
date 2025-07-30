@@ -4,7 +4,7 @@ from numpy.typing import NDArray
 import numpy as np
 
 class PageData:
-    def __init__(self, page_number: int, text: str, thumbnail: Image, embedding: Optional[NDArray[np.float_]]):
+    def __init__(self, page_number: int, text: str, thumbnail: Image, embedding: Optional[NDArray[np.float64]]):
         self.page_number = page_number
         self.text = text
         self.thumbnail = thumbnail

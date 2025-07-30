@@ -16,13 +16,13 @@ class VideoSegmentData:
                  screen_text: str,
                  thumbnail: PIL.Image.Image,
                  title: Optional[str],
-                 embedding: Optional[NDArray[np.float_]]):
+                 embedding: Optional[NDArray[np.float64]]):
         self.start_time: int = start_time
         self.transcript: str = transcript
         self.screen_text: str = screen_text
         self.thumbnail: PIL.Image.Image = thumbnail
         self.title = title
-        self.embedding: Optional[NDArray[np.float_]] = embedding
+        self.embedding: Optional[NDArray[np.float64]] = embedding
 
 
 class VideoData:

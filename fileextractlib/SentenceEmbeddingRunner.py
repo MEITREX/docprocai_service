@@ -19,7 +19,7 @@ class SentenceEmbeddingRunner:
         query_string = urllib.parse.urlencode(query_params)
         return f"{self.protocol}://{self.hostname}:{self.port}/embed?{query_string}"
 
-    def generate_embeddings(self, words: List[str]) -> NDArray[np.float_]:
+    def generate_embeddings(self, words: List[str]) -> NDArray[np.float64]:
         """
         This method accepts a list of strings and computes for each its respective embedding vector.
         :param words: a list of words for which the respective embeddings shall be computed.
