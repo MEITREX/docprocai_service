@@ -1,6 +1,5 @@
 # URL to the graphql endpoint of the media service. This is used to fetch information about media records the service
 # needs to process
-#media_service_url: "http://localhost:3500/v1.0/invoke/docprocai-service/method/graphql"
 
 media_service_url: "http://app-media:3001/graphql"
 
@@ -102,55 +101,7 @@ lecture_llm_generator:
       ```<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 
   # Settings pertaining to the generation of summaries for documents
-  document_summary_generator:services:
-  database:
-    image: pgvector/pgvector:pg16
-    command: -c 'max_connections=500'
-    restart: unless-stopped
-    expose:
-      - 5432
-    ports:
-      - "5432:5432"
-    volumes:
-      - dbdata:/var/lib/postgresql/data
-      - ./../docprocai_service/pg-init-scripts:/docker-entrypoint-initdb.d
-    environment:
-      - POSTGRES_USER=root
-      - POSTGRES_PASSWORD=root
-      - POSTGRES_CREATE_DB_DOCPROCAI_SERVICE=docprocai_service
-  app-docprocai:
-    build:
-      context: ./../docprocai_service
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    container_name: docprocai_service
-    volumes:
-      - "./../docprocai_service/llm_data:/app/llm_data"
-    ports:
-      - "9900:9900"
-      - "9901:9901"
-    depends_on:
-      - database
-  dapr-docprocai:
-    image: "daprio/daprd"
-    command: [
-      "./daprd",
-      "--app-id", "docprocai_service",
-      "--app-port", "9901",
-      "--dapr-http-port", "9900",
-      "--resources-path", "./components"
-    ]
-    volumes:
-      - "./../docprocai_service/components/:/components" # Mount our components folder for the runtime to use. The mounted location must match the --resources-path argument.
-    depends_on:
-      - app-docprocai
-      - redis
-    network_mode: "service:app-docprocai"
-  redis:
-    image: "redis:alpine"
-    expose:
-      - "6379"
-
+  document_summary_generator:
     # If true, llm features are enabled in the processing pipeline. If false, these steps are skipped in the pipeline
     # and relevant data attributes replaced by placeholders or left unset
     # Default: true
