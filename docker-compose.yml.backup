@@ -27,6 +27,13 @@ services:
       - "9901:9901"
     depends_on:
       - database
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
   dapr-docprocai:
     image: "daprio/daprd"
     command: [
