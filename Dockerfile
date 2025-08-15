@@ -18,4 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # copy the current directory contents into the container at /app
 COPY . .
 
+# This environment varialble must be set to connect this service with the media service. 
+ENV media_service_url="http://app-media:3001/graphql"
+ENV connection_string="user=root password=root host=database port=5432 dbname=docprocai_service"
+
 CMD ["python", "./app.py"]

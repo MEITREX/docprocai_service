@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 import uuid
+import os
 from time import sleep
 from typing import Callable, Self, Awaitable, Optional
 
@@ -38,9 +39,10 @@ _logger = logging.getLogger(__name__)
 
 
 class DocProcAiService:
+
     def __init__(self):
         self.database_connection = psycopg.connect(
-            config.current["database"]["connection_string"],
+            os.environ.get("connection_string"),
             autocommit=True,
             row_factory=psycopg.rows.dict_row
         )
