@@ -1,12 +1,16 @@
 # URL to the graphql endpoint of the media service. This is used to fetch information about media records the service
 # needs to process
-media_service_url: "http://app-media:3001/graphql"
 
+# The option was disabled as it is currently fetched from an environment variable. It will be removed in a future version.
+#media_service_url: "http://app-media:3001/graphql"
+
+
+# The option was disabled as it is currently fetched from an environment variable. It will be removed in a future version.
 # Settings pertaining to the database connection of the service. Note that the service expects a postgresql database
 # with the pgvector extension installed
-database:
+#database:
   # Connection string to the database
-  connection_string: "user=root password=root host=database port=5432 dbname=docprocai_service"
+  #connection_string: "user=root password=root host=database port=5432 dbname=docprocai_service"
 
 # Settings pertaining to the transcript generation for videos
 transcript_generation:
@@ -31,7 +35,8 @@ text_embedding:
   protocol: "http"
   hostname: "129.69.217.248"
   port: 11435
-
+  dimensionality: 1024
+  model_path: "/"
 
 # Settings pertaining to the content linking step during the content processing pipeline. Content linking is the process
 # of analyzing all documents and videos of a content object and checking which parts of the documents should be linked,

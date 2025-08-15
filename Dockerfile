@@ -15,11 +15,11 @@ COPY requirements.txt .
 # install dependencies using pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install torch manually, it needs a special version which supports our CUDA version. Install this AFTER the
-# requirements, as some of the requirements might install torch as well, but we want to install the correct version
-RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-
 # copy the current directory contents into the container at /app
 COPY . .
+
+# This environment varialble must be set to connect this service with the media service. 
+ENV media_service_url="http://app-media:3001/graphql"
+ENV connection_string="user=root password=root host=database port=5432 dbname=docprocai_service"
 
 CMD ["python", "./app.py"]

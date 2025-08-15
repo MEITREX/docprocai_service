@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 import uuid
+import os
 from time import sleep
 from typing import Callable, Self, Awaitable, Optional
 
@@ -15,7 +16,6 @@ import client.MediaServiceClient as MediaServiceClient
 import config
 import dto
 import dto.mapper as mapper
-import fileextractlib.LLMService as LlamaRunner
 from fileextractlib.TopicModel import TopicModel
 from dto import MediaRecordSegmentLinkDto, SemanticSearchResultDto, \
     AiEntityProcessingProgressDto, MediaRecordSegmentDto, TaskInformationDto
@@ -32,14 +32,17 @@ from persistence.AssesmentInfoDbConnector import AssessmentInfoDbConnector
 from persistence.entities import *
 from utils.SortedPriorityQueue import SortedPriorityQueue
 from controller.events import ContentChangeEvent, CrudOperation
+from numpy.typing import NDArray
+import numpy as np
 
 _logger = logging.getLogger(__name__)
 
 
 class DocProcAiService:
+
     def __init__(self):
         self.database_connection = psycopg.connect(
-            config.current["database"]["connection_string"],
+            os.environ.get("connection_string"),
             autocommit=True,
             row_factory=psycopg.rows.dict_row
         )
@@ -51,9 +54,6 @@ class DocProcAiService:
 
         # graphql client for interacting with the media service
         self.__media_service_client: MediaServiceClient.MediaServiceClient = MediaServiceClient.MediaServiceClient()
-
-        # only load the llamaRunner the first time we actually need it, not now
-        self.__llama_runner: LlamaRunner.LlamaRunner | None = None
 
         self.__sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
 
@@ -78,7 +78,7 @@ class DocProcAiService:
         self.__background_task_thread.start()
 
     def __del__(self):
-        self._keep_background_task_thread_alive = False
+        self._keep_background_task_thread_alive.clear()
 
     def enqueue_ingest_media_record_task(self, media_record_id: uuid.UUID) -> None:
         """
@@ -247,7 +247,7 @@ class DocProcAiService:
                 sentence_embedding_runner: SentenceEmbeddingRunner = SentenceEmbeddingRunner()
 
                 for task_information in task_information_list:
-                    embedding: Tensor = sentence_embedding_runner.generate_embeddings(
+                    embedding: NDArray[np.float64] = sentence_embedding_runner.generate_embeddings(
                         [task_information["textualRepresentation"]])[0]
 
                     self.segment_database.upsert_assessment_segment(task_information["taskId"],

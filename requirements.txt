@@ -1,7 +1,5 @@
 ffmpeg-python
 pytesseract
-transformers==4.48.3
-bitsandbytes==0.44.1
 pydantic
 lm-format-enforcer
 webvtt-py
@@ -9,7 +7,6 @@ numpy
 openai-whisper
 Pillow
 pdf2image
-sentence-transformers
 fastapi
 psycopg[binary]
 uvicorn
@@ -22,9 +19,7 @@ opencv-python
 requests
 tika
 pypdf
-peft
 pyyaml
-torch
 annotated-types
 bertopic
 scikit-learn

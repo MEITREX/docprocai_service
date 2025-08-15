@@ -1,10 +1,10 @@
 from PIL.Image import Image
-from torch import Tensor
 from typing import Optional
-
+from numpy.typing import NDArray
+import numpy as np
 
 class PageData:
-    def __init__(self, page_number: int, text: str, thumbnail: Image, embedding: Optional[Tensor]):
+    def __init__(self, page_number: int, text: str, thumbnail: Image, embedding: Optional[NDArray[np.float64]]):
         self.page_number = page_number
         self.text = text
         self.thumbnail = thumbnail

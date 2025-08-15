@@ -2,7 +2,6 @@ import sys
 
 import time
 from fileextractlib.SentenceEmbeddingRunner import SentenceEmbeddingRunner
-from fileextractlib.VideoProcessor import VideoProcessor
 from fileextractlib.VideoData import VideoSegmentData
 
 class LectureVideoEmbeddingGenerator:

@@ -2,9 +2,11 @@ import uuid
 import config
 import gql
 import gql.transport.aiohttp
+import os
 
 
 class MediaServiceClient:
+
     async def get_media_record_type_and_download_url(self, document_id: uuid.UUID) -> dict:
         self.__init_client_if_not_already()
 
@@ -46,5 +48,5 @@ class MediaServiceClient:
         return media_records
 
     def __init_client_if_not_already(self):
-        transport = gql.transport.aiohttp.AIOHTTPTransport(url=config.current["media_service_url"])
+        transport = gql.transport.aiohttp.AIOHTTPTransport(url=os.environ.get("media_service_url"))
         self.__client = gql.Client(transport=transport, fetch_schema_from_transport=True)
