@@ -40,6 +40,9 @@ class VideoProcessor:
         transcript_generator: TranscriptGenerator = TranscriptGenerator()
         vtt: WebVTT = transcript_generator.process_to_vtt(file_url)
 
+        json_probe = ffmpeg.probe(file_url)
+        length_seconds = float(json_probe["format"]["duration"])
+
         stream = ffmpeg.input(file_url)
 
         # construct ffmpeg select filter to extract a frame at each transcript caption start time
@@ -170,7 +173,7 @@ class VideoProcessor:
         current_segment.thumbnail = current_segment_image
         segments.append(current_segment)
 
-        video_data = VideoData(vtt, segments)
+        video_data = VideoData(length_seconds, vtt, segments)
 
         _logger.info("Segmented video in " + str(time.time() - start_time) + " seconds.")
 
