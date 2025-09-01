@@ -41,6 +41,7 @@ _logger = logging.getLogger(__name__)
 class DocProcAiService:
 
     def __init__(self):
+        print(os.environ.get("connection_string"))
         self.database_connection = psycopg.connect(
             os.environ.get("connection_string"),
             autocommit=True,
