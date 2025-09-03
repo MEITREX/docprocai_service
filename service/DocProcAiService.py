@@ -16,6 +16,7 @@ import client.MediaServiceClient as MediaServiceClient
 import config
 import dto
 import dto.mapper as mapper
+from events import DaprPublisher, MediaRecordInfoEvent
 from fileextractlib.TopicModel import TopicModel
 from dto import MediaRecordSegmentLinkDto, SemanticSearchResultDto, \
     AiEntityProcessingProgressDto, MediaRecordSegmentDto, TaskInformationDto
@@ -34,6 +35,7 @@ from utils.SortedPriorityQueue import SortedPriorityQueue
 from controller.events import ContentChangeEvent, CrudOperation
 from numpy.typing import NDArray
 import numpy as np
+import events
 
 _logger = logging.getLogger(__name__)
 
@@ -105,6 +107,16 @@ class DocProcAiService:
                     _logger.info("Starting document processor for " + str(media_record_id))
                     document_processor = DocumentProcessor()
                     document_data = document_processor.process(download_url)
+
+                    # publish document info event
+                    dapr_publisher = DaprPublisher()
+                    dapr_publisher.publish_media_record_info_event({
+                        "mediaRecordId": str(media_record_id),
+                        "mediaType": record_type,
+                        "durationSeconds": None,
+                        "pageCount": len(document_data.pages)
+                    })
+
                     _logger.info("Generating embeddings for " + str(media_record_id))
                     self.__lecture_pdf_embedding_generator.generate_embeddings(document_data.pages)
                     for segment in document_data.pages:
@@ -131,6 +143,15 @@ class DocProcAiService:
                         minimum_segment_length=config.current["video_segmentation"]["minimum_segment_length"])
                     video_data = video_processor.process(download_url)
                     del video_processor
+
+                    # publish video info event
+                    dapr_publisher = DaprPublisher()
+                    dapr_publisher.publish_media_record_info_event({
+                        "mediaRecordId": str(media_record_id),
+                        "mediaType": record_type,
+                        "durationSeconds": video_data.length_seconds,
+                        "pageCount": None
+                    })
 
                     # generate text embeddings for the segments of the video
                     _logger.info("Generating embeddings for " + str(media_record_id))

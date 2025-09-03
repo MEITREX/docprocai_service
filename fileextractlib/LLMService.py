@@ -209,8 +209,10 @@ class DefaultLLMService(AbstractLLMService):
 
     def _fetch_candidate_model_list(self, profile: LLMProfile) -> List[str]:
         model_list: List[Dict] = self._fetch_available_models()
+        print("All available models:", model_list)
         model_filter: Callable[[List[Dict]], List[Dict]] = DefaultLLMService.create_model_filter(profile)
         candidate_model_list: List[Dict] = model_filter(model_list)
+        print("Candidate models: ", candidate_model_list)
         candidate_model_name_list: List[str] = DefaultLLMService.extract_model_names(candidate_model_list)
         return candidate_model_name_list
 
