@@ -1,6 +1,3 @@
-from enum import Enum, auto
-
-import dapr
 from dapr.ext.fastapi.app import DaprApp
 from fastapi import FastAPI
 import uuid
