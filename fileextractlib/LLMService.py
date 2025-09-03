@@ -24,8 +24,8 @@ class Tag(Enum):
     NO_TAG = ""
     BASE = "8b-instruct-q4_0"
     TITLES = "titles"
-    TITLES_SMALL = "titles_small"
-    TITLES_FULL_SLIDING_20k = "titles_full_sliding_20k"
+    TITLES_SMALL = "titles-small"
+    TITLES_FULL_SLIDING_20k = "titles-full-sliding-20k"
 
 
 class LLMProfile:
@@ -245,5 +245,5 @@ if __name__ == "__main__":
     #arg_parser = argparse.ArgumentParser()
     #arg_parser.add_argument("--prompt", type=str, required=True, help="A prompt to execute.")
     #args = arg_parser.parse_args()
-    answer_text = DefaultLLMService().run_custom("test", None, DOCUMENT_SUMMARY_GENERATOR_PROFILE, None)
+    answer_text = DefaultLLMService().run_custom("test", None, SEGMENT_TITLE_GENERATOR_PROFILE, None)
     print(answer_text)
