@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 'remove_old'
+      - 'main'
 
 jobs:
   docker-build:
