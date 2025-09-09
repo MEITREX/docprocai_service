@@ -14,6 +14,6 @@ class DaprPublisher:
     def publish_media_record_info_event(self, event: MediaRecordInfoEvent):
         topic = "media-record-info"
         url = f"{self.base_url}/publish/{PUBSUB_NAME}/{topic}"
-        resp = requests.post(url, json=json.dumps(event))
+        resp = requests.post(url, json=event)
         resp.raise_for_status()
         return resp.json() if resp.content else None
