@@ -180,7 +180,8 @@ class DocProcAiService:
                                                                              video_data.summary,
                                                                              video_data.vtt.content)
                 else:
-                    raise ValueError("Asked to ingest unsupported media record type of type " + media_record["type"])
+                    _logger.info("Asked to ingest unsupported media record type of type " + media_record["type"] +
+                                 ". Skipping.")
 
                 try:
                     self.__generate_tags()
