@@ -1,10 +1,13 @@
 import requests
-import json
+import logging
 import os
+import json
 
 from events import MediaRecordInfoEvent
 
 PUBSUB_NAME = "meitrex"
+
+_logger = logging.getLogger(__name__)
 
 class DaprPublisher:
     def __init__(self):
@@ -16,4 +19,5 @@ class DaprPublisher:
         url = f"{self.base_url}/publish/{PUBSUB_NAME}/{topic}"
         resp = requests.post(url, json=event)
         resp.raise_for_status()
+        _logger.info("Published event: %s", json.dumps(event))
         return resp.json() if resp.content else None
